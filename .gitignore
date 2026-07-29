@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local-only: 25.7MB pristine robot scan, kept for re-running scripts/simplify-robot.mjs.
+# The shipped, simplified public/robot.glb IS committed. Force-add if you want the
+# original in the repo (consider Git LFS given the size).
+/public/robot-backup.glb

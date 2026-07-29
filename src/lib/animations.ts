@@ -216,6 +216,23 @@ export function ghostTextCycle(targets: Target) {
 }
 
 /**
+ * Floating prop loop — small decorative elements drift gently up and down
+ * forever (y ±distance, sine in/out, ghost-cycle period). A stagger offsets each
+ * target so a group of props never bobs in unison. Reduced motion: static.
+ */
+export function floatLoop(targets: Target, distance = 8) {
+  if (prefersReducedMotion()) return gsap.timeline();
+  return gsap.to(targets, {
+    y: `-=${distance}`,
+    duration: DURATION.ghostHold,
+    ease: EASE.ghost,
+    yoyo: true,
+    repeat: -1,
+    stagger: 0.6,
+  });
+}
+
+/**
  * Scroll indicator — a looping scaleY "pulse". Pair with `fadeOutOnScroll` below
  * so it disappears once the user starts scrolling.
  */
@@ -298,32 +315,41 @@ export function fadeOutOnScroll(target: Target, start = "top top-=50") {
 // Scroll-triggered (scrub — tied to scroll position)
 // -----------------------------------------------------------------------------
 
+/** Marquee row colors — dimmed resting state vs. bright active state. */
+export const MARQUEE_DIM = { color: "#6b7280", opacity: 0.35 }; // gray-500
+export const MARQUEE_BRIGHT = { color: "#ffffff", opacity: 1 };
+
 /**
- * Projects marquee rows — gray→white color/opacity reveal scrubbed to scroll,
- * pinned via a visual column. Attach one per row; `pin` should be the sticky
- * column element (or omit to leave pinning to a parent).
+ * Projects marquee row focus — a row brightens (gray→white) as it scrolls into
+ * the viewport-center "active zone" and dims again as it leaves, all scrubbed to
+ * scroll (no hard switch). The timeline is in → hold → out, so with scrub the
+ * bright plateau sits at the middle of the row's passage across the viewport.
+ *
+ * Under prefers-reduced-motion the row is simply set bright and stays there
+ * (no scrub-tied dimming), per spec.
  */
-export function marqueeRowActivate(
-  row: Target,
-  options: { trigger?: gsap.DOMTarget; pin?: gsap.DOMTarget } = {},
-) {
-  return gsap.fromTo(
-    row,
-    { color: "#6b7280", opacity: 0.4 }, // gray-500
-    {
-      color: "#ffffff",
-      opacity: 1,
+export function marqueeRowFocus(row: Target, trigger?: gsap.DOMTarget) {
+  if (prefersReducedMotion()) return gsap.set(row, MARQUEE_BRIGHT);
+  const tl = gsap.timeline({
+    scrollTrigger: {
+      trigger: (trigger ?? row) as gsap.DOMTarget,
+      start: "top 80%", // row's top enters lower viewport → begin brightening
+      end: "bottom 20%", // row's bottom leaves upper viewport → fully dimmed
+      scrub: SCRUB.marquee,
+    },
+  });
+  // Durations act as proportions under scrub: 30% in, 40% bright hold, 30% out.
+  tl.fromTo(row, MARQUEE_DIM, {
+    ...MARQUEE_BRIGHT,
+    duration: DURATION.marqueeRow,
+    ease: EASE.marquee,
+  })
+    .to(row, {
+      ...MARQUEE_DIM,
       duration: DURATION.marqueeRow,
       ease: EASE.marquee,
-      scrollTrigger: {
-        trigger: (options.trigger ?? row) as gsap.DOMTarget,
-        start: "top 60%",
-        end: "top 40%",
-        scrub: SCRUB.marquee,
-        pin: options.pin,
-      },
-    },
-  );
+    }, `+=${DURATION.marqueeRow * 1.33}`);
+  return tl;
 }
 
 /**

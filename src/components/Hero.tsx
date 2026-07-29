@@ -20,6 +20,7 @@ import { useRef } from "react";
 import dynamic from "next/dynamic";
 import { useGSAP } from "@/lib/gsap";
 import { navIntro } from "@/lib/animations";
+import { CodingSince, LiveStatus } from "@/components/Hud";
 
 // ssr:false — the WebGL canvas is client-only. The sized wrapper below reserves
 // the space so there's no layout shift while it loads.
@@ -46,7 +47,8 @@ export function Hero() {
       // Top-aligned so spacing is deterministic: pt-28 clears the fixed navbar
       // with breathing room above the head, and the tight gap-6 pulls the
       // nameplate up close beneath it (balanced, not crammed-top/far-bottom).
-      className="flex min-h-screen flex-col items-center gap-6 px-6 pt-28 text-center"
+      // relative: anchors the absolute HUD corner elements below.
+      className="relative flex min-h-screen flex-col items-center gap-6 px-6 pt-28 text-center"
     >
       {/* --- 3D low-poly wireframe head (hero visual, anchors the top) ------- */}
       {/* Responsive via clamp(): floor 14rem, ~42vw fluid, cap 21rem. The head
@@ -83,6 +85,15 @@ export function Hero() {
         >
           Designer &amp; developer building motion-led interfaces.
         </p>
+      </div>
+
+      {/* --- HUD corners (shared with About) --------------------------------- */}
+      {/* data-hero-line: they join the existing nameplate intro stagger. */}
+      <div data-hero-line className="absolute bottom-8 left-6 sm:left-10">
+        <LiveStatus />
+      </div>
+      <div data-hero-line className="absolute bottom-8 right-6 sm:right-10">
+        <CodingSince />
       </div>
     </section>
   );

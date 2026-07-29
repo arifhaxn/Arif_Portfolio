@@ -43,7 +43,11 @@ export const DURATION = {
   badgeFill: 0.275, // 0.25–0.3s
   cardSwap: 0.55, // 0.5–0.6s
   playgroundCell: 0.15, // 0.1–0.2s per cell
+  bgZoom: 0.9, // 0.8–1s — Projects background polyhedron zoom-in
 } as const;
+
+/** Resting opacity of the Projects background polyhedron (ambient, not focal). */
+export const BG_SHAPE_OPACITY = 0.45;
 
 /** Stagger values in seconds. */
 export const STAGGER = {

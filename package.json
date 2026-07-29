@@ -20,6 +20,9 @@
     "three": "^0.185.1"
   },
   "devDependencies": {
+    "@gltf-transform/cli": "^4.4.2",
+    "@gltf-transform/core": "^4.4.2",
+    "@gltf-transform/functions": "^4.4.2",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -27,6 +30,7 @@
     "@types/three": "^0.185.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
+    "meshoptimizer": "^1.2.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

@@ -40,7 +40,10 @@ export function Navbar() {
   return (
     <header
       ref={root}
-      className="fixed inset-x-0 top-0 z-50 flex items-center justify-between px-6 py-5 sm:px-10"
+      // bg + backdrop-blur: the nav is fixed and content scrolls beneath it —
+      // without a backdrop, wireframe edges from the 3D canvases show through
+      // between the links and read as stray diagonal lines across the nav.
+      className="fixed inset-x-0 top-0 z-50 flex items-center justify-between bg-black/70 px-6 py-5 backdrop-blur-md sm:px-10"
     >
       {/* Logo mark — text initials, first item in the stagger */}
       <a
