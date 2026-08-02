@@ -140,7 +140,10 @@ export default function AchievementsPage() {
         className="absolute inset-0 z-0 hidden cursor-grab touch-none select-none overflow-hidden active:cursor-grabbing lg:block"
       >
         <div ref={grid} className="absolute left-1/2 top-1/2 will-change-transform">
-          <div className="flex flex-col gap-20">
+          {/* pt-16 reserves clear space above the first section so that when the
+              board opens at its top, the Hackathons label sits below the fixed
+              60px navbar instead of behind it. */}
+          <div className="flex flex-col gap-20 pt-16">
             {GROUPS.map(({ category, items }) => (
               <section key={category} className="flex flex-col gap-5">
                 <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-zinc-500">
