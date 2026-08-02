@@ -3,22 +3,24 @@
 // -----------------------------------------------------------------------------
 // /achievements — certificates & credentials
 // -----------------------------------------------------------------------------
-// Dedicated route (Navbar lives in the root layout, so it persists here). The
-// page has two layouts, the site's established desktop-rich / mobile-simple split:
+// Dedicated route (Navbar lives in the root layout, so it persists here). Two
+// layouts, the site's established desktop-rich / mobile-simple split:
 //
-// Desktop (lg+): a bounded certificate grid, larger than the viewport in both
-//   directions, that the user freely PANS (wheel / trackpad / drag) via GSAP
-//   Observer. The grid glides with inertia, rubber-bands at its edges, and shears
-//   slightly along the pan velocity (a rubber-sheet warp). Cells punch in on
-//   mount and carry a continuous low-amplitude idle ripple. Hovering a cell lifts
-//   it and reveals its label. All the motion lives in the achievements* helpers.
+// Desktop (lg+): a FULL-BLEED board of labelled certificate sections (Hackathons,
+//   Courses, …), each a grid of cards, that the user freely PANS (wheel/trackpad
+//   /drag) via GSAP Observer. The grid glides with inertia, rubber-bands at its
+//   edges, and CONVERGES (scales slightly toward its center) with pan speed — a
+//   "warp back to scroll" feel. Cells render in via a pixelated top-to-bottom
+//   sweep on mount and carry a subtle idle ripple; hovering a cell lifts it and
+//   reveals its label. Following the reference, there's NO top header: the label
+//   sits in the bottom-left HUD corner and the live stats in the bottom-right,
+//   so nothing overlaps the grid and the navbar simply floats over it.
 //
-// Mobile (<lg): the pan/warp is dropped entirely (touch + expense). A plain
-//   2-column grid reveals card-by-card via the shared `scrollReveal` as the page
-//   scrolls normally.
+// Mobile (<lg): pan/warp dropped. Sections stack under an in-flow header, each a
+//   2-column grid whose cards reveal via the shared `scrollReveal` on scroll.
 //
-// The header stat readout is REAL, not decoration: ELAPSED ticks from mount and
-// SWITCHES counts every time the focused cell actually changes.
+// The stat readout is REAL: ELAPSED ticks from mount and SWITCHES counts every
+// time the focused cell actually changes.
 // -----------------------------------------------------------------------------
 
 import { useEffect, useRef, useState } from "react";
@@ -30,17 +32,18 @@ import {
   scrollReveal,
 } from "@/lib/animations";
 import { ACHIEVE } from "@/lib/motion";
-import { ACHIEVEMENTS } from "@/lib/achievements";
+import { ACHIEVEMENTS, achievementsByCategory } from "@/lib/achievements";
 import { AchievementCard } from "@/components/AchievementCard";
 
-// Desktop grid geometry. Chosen so the whole grid (4 cols × 3 rows of these
-// cards + gaps ≈ 1488×900) is larger than a typical viewport in both directions,
-// so it clearly extends past all four edges at rest and needs panning to explore.
+// Card geometry — kept at the original compact size/spacing. All sections use
+// the same column count so their grids left-align to a consistent width; stacked
+// vertically, the whole board is larger than the viewport (that overflow is the
+// pan range).
 const COLS = 4;
 const CARD_W = 300;
 const CARD_H = 220;
-const GAP_X = 96;
-const GAP_Y = 120;
+
+const GROUPS = achievementsByCategory();
 
 export default function AchievementsPage() {
   const root = useRef<HTMLElement>(null);
@@ -72,20 +75,20 @@ export default function AchievementsPage() {
     () => {
       const mm = gsap.matchMedia();
 
-      // ---- Desktop: intro + idle warp + pan/warp ----
+      // ---- Desktop: pixel intro + idle warp + pan/converge ----
       mm.add("(min-width: 1024px)", () => {
         const cells = gsap.utils.toArray<HTMLElement>(
           "[data-cell]",
           grid.current,
         );
 
-        // Center the pannable grid, then let the pan helper drive x/y/skew.
+        // Center the pannable board, then let the pan helper drive x/y/scale.
         gsap.set(grid.current, { xPercent: -50, yPercent: -50 });
 
         achievementsGridIntro(cells);
         const idle = achievementsIdleWarp(cells);
 
-        // Bounds recomputed live so panning tracks window resizes. Grid is
+        // Bounds recomputed live so panning tracks window resizes. Board is
         // centered, so each axis allows ± half the overflow (+ a little slack).
         const getBounds = () => {
           const g = grid.current;
@@ -111,7 +114,7 @@ export default function AchievementsPage() {
       mm.add("(max-width: 1023px)", () => {
         gsap.utils
           .toArray<HTMLElement>("[data-mobile-card]", root.current)
-          .forEach((card) => scrollReveal(card, { y: 24 }, "top 88%"));
+          .forEach((card) => scrollReveal(card, { y: 24 }, "top 90%"));
       });
 
       return () => mm.revert();
@@ -122,88 +125,110 @@ export default function AchievementsPage() {
   const mmss = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(
     elapsed % 60,
   ).padStart(2, "0")}`;
-  const statLine = `CERTIFICATES ${String(ACHIEVEMENTS.length).padStart(
-    2,
-    "0",
-  )} · ELAPSED ${mmss} · SWITCHES ${String(switches).padStart(3, "0")}`;
+  const certCount = String(ACHIEVEMENTS.length).padStart(3, "0");
+  const switchCount = String(switches).padStart(3, "0");
 
   return (
-    <main ref={root} className="relative min-h-screen bg-black text-white">
-      {/* ================= Header + live stat readout (shared) ============== */}
-      {/* Fixed on desktop so it floats over the pan pane; the mobile layout
-          re-renders its own in-flow header below. */}
-      <div className="pointer-events-none fixed inset-x-0 top-0 z-20 hidden px-6 pt-24 sm:px-10 lg:block">
-        <p className="text-xs font-medium uppercase tracking-[0.3em] text-zinc-500">
-          / Achievements
-        </p>
-        <h1 className="mt-2 text-4xl font-semibold tracking-tight sm:text-5xl">
-          Achievements
-        </h1>
-        <p className="mt-1 text-sm text-zinc-400">— Certificates &amp; credentials</p>
-      </div>
-      {/* Stat readout — same mono/HUD treatment as Hud.tsx, pinned bottom-left. */}
-      <div className="pointer-events-none fixed bottom-8 left-6 z-20 hidden font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 sm:left-10 lg:block">
-        <span className="tabular-nums text-zinc-300">{statLine}</span>
-      </div>
-      {/* Drag hint, bottom-right. */}
-      <div className="pointer-events-none fixed bottom-8 right-6 z-20 hidden font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600 sm:right-10 lg:block">
-        Drag / scroll to explore
-      </div>
-
-      {/* ===================== Desktop: pannable warp grid ================== */}
+    <main
+      ref={root}
+      className="relative min-h-screen bg-black text-white lg:h-screen lg:overflow-hidden"
+    >
+      {/* ===================== Desktop: pannable section board ============== */}
       <div
         ref={panViewport}
-        className="fixed inset-0 z-0 hidden cursor-grab touch-none overflow-hidden active:cursor-grabbing lg:block"
+        className="absolute inset-0 z-0 hidden cursor-grab touch-none overflow-hidden active:cursor-grabbing lg:block"
       >
         <div ref={grid} className="absolute left-1/2 top-1/2 will-change-transform">
-          <div
-            className="grid"
-            style={{
-              gridTemplateColumns: `repeat(${COLS}, ${CARD_W}px)`,
-              columnGap: `${GAP_X}px`,
-              rowGap: `${GAP_Y}px`,
-            }}
-          >
-            {ACHIEVEMENTS.map((a) => (
-              <div
-                key={a.id}
-                data-cell
-                style={{ width: CARD_W, height: CARD_H }}
-                className="will-change-transform"
-                onMouseEnter={() => focus(a.id)}
-                onMouseLeave={() => focus(null)}
-              >
-                <AchievementCard achievement={a} focused={focusedId === a.id} />
-              </div>
+          <div className="flex flex-col gap-20">
+            {GROUPS.map(({ category, items }) => (
+              <section key={category} className="flex flex-col gap-5">
+                <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-zinc-500">
+                  <span className="text-zinc-300">/ {category}</span>
+                  <span className="ml-3 text-zinc-600">
+                    {String(items.length).padStart(2, "0")}
+                  </span>
+                </p>
+                <div
+                  className="grid gap-x-24 gap-y-24"
+                  style={{ gridTemplateColumns: `repeat(${COLS}, ${CARD_W}px)` }}
+                >
+                  {items.map((a) => (
+                    <div
+                      key={a.id}
+                      data-cell
+                      style={{ width: CARD_W, height: CARD_H }}
+                      className="will-change-transform"
+                      onMouseEnter={() => focus(a.id)}
+                      onMouseLeave={() => focus(null)}
+                    >
+                      <AchievementCard achievement={a} focused={focusedId === a.id} />
+                    </div>
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         </div>
       </div>
 
-      {/* ========================= Mobile: simple grid ===================== */}
+      {/* --- Desktop HUD corners (over the board), same look as Hud.tsx.
+          pointer-events-none so they never intercept a drag/wheel on the grid. */}
+      {/* Bottom-left: section label. */}
+      <div className="pointer-events-none absolute bottom-8 left-6 z-20 hidden sm:left-10 lg:block">
+        <h1 className="font-mono text-sm font-semibold uppercase tracking-[0.2em] text-white">
+          / Achievements
+        </h1>
+        <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+          — Certificates &amp; credentials
+        </p>
+      </div>
+      {/* Bottom-right: live stat readout (3-line, label + value). */}
+      <div className="pointer-events-none absolute bottom-8 right-6 z-20 hidden font-mono text-[10px] uppercase tracking-[0.2em] sm:right-10 lg:block">
+        <div className="grid grid-cols-[auto_auto] gap-x-6 gap-y-1">
+          <span className="text-zinc-600">Certificates</span>
+          <span className="text-right tabular-nums text-zinc-300">{certCount}</span>
+          <span className="text-zinc-600">Elapsed</span>
+          <span className="text-right tabular-nums text-zinc-300">{mmss}</span>
+          <span className="text-zinc-600">Switches</span>
+          <span className="text-right tabular-nums text-zinc-300">{switchCount}</span>
+        </div>
+      </div>
+
+      {/* ==================== Mobile: stacked sections ===================== */}
       <div className="px-6 pb-24 pt-28 lg:hidden">
         <p className="text-xs font-medium uppercase tracking-[0.3em] text-zinc-500">
           / Achievements
         </p>
         <h1 className="mt-2 text-4xl font-semibold tracking-tight">Achievements</h1>
         <p className="mt-1 text-sm text-zinc-400">— Certificates &amp; credentials</p>
-        {/* Stat readout (mobile: in-flow, SWITCHES driven by taps). */}
         <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
-          <span className="tabular-nums text-zinc-300">{statLine}</span>
+          <span className="tabular-nums text-zinc-300">
+            CERTIFICATES {certCount} · ELAPSED {mmss} · SWITCHES {switchCount}
+          </span>
         </p>
 
-        <div className="mt-10 grid grid-cols-2 gap-4">
-          {ACHIEVEMENTS.map((a) => (
-            <div
-              key={a.id}
-              data-mobile-card
-              className="h-44"
-              onClick={() => toggle(a.id)}
-            >
-              <AchievementCard achievement={a} focused={focusedId === a.id} />
+        {GROUPS.map(({ category, items }) => (
+          <section key={category} className="mt-12">
+            <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-zinc-500">
+              <span className="text-zinc-300">/ {category}</span>
+              <span className="ml-3 text-zinc-600">
+                {String(items.length).padStart(2, "0")}
+              </span>
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-4">
+              {items.map((a) => (
+                <div
+                  key={a.id}
+                  data-mobile-card
+                  className="h-44"
+                  onClick={() => toggle(a.id)}
+                >
+                  <AchievementCard achievement={a} focused={focusedId === a.id} />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </section>
+        ))}
       </div>
     </main>
   );

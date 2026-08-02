@@ -21,7 +21,7 @@ export const EASE = {
   ghost: "sine.inOut", // About ghost-text cycle
   cardSwap: "power3.inOut", // Award thumbnail card swap
   cardSwapBack: "back.out(1.3)", // Award card swap (overshoot variant)
-  achieveIntro: "back.out(1.6)", // Achievements grid punch-in (scale overshoot)
+  achievePixel: "steps(7)", // Achievements pixelated top→bottom render sweep
   linear: "none", // Parallax scrubs — must be linear
 } as const;
 
@@ -66,10 +66,16 @@ export const ACHIEVE = {
   panLerp: 0.12, // ease toward target per frame (inertia + damped stop)
   edgeResist: 0.32, // rubber-band compression when panned past a bound
   edgePad: 40, // extra px of pan slack beyond the exact edge
-  skewScale: 0.45, // pan velocity (px/frame) → skew degrees
-  skewMax: 7, // clamp on the velocity-driven skew (deg)
-  idleAmp: 4, // idle-warp vertical drift (px)
-  idleRotate: 1.4, // idle-warp rotation (deg)
+  // Converge-warp: while panning, the whole grid shrinks slightly toward its
+  // center (proportional to pan speed) and springs back to 1 at rest — reads as
+  // the screen "warping back" to scroll. Replaces the old left/right skew.
+  convergeScale: 0.0018, // pan speed (px/frame) → grid shrink amount
+  convergeMax: 0.07, // max shrink (scale floor = 1 − this)
+  idleAmp: 10, // idle-warp vertical drift (px) — subtle but perceptible
+  idleRotate: 2.6, // idle-warp rotation (deg)
+  // Pixelated top→bottom intro sweep.
+  introSweep: 0.85, // total top-to-bottom stagger spread (s)
+  introJitter: 0.12, // random per-cell delay → chunky "rendering" scatter
 } as const;
 
 /** Stagger values in seconds. */

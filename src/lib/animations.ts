@@ -482,22 +482,31 @@ export function playgroundCellShuffle(cell: Target, onSwap?: () => void) {
 // plain DOM cells (no WebGL) and, like every helper here, honor reduced motion.
 
 /**
- * Achievements grid intro — cells punch in with a snappy scale + fade, the
- * stagger radiating out from the grid center (GSAP infers the grid from the
- * cells' laid-out positions, so this works for any column count). Reduced
- * motion: cells are set to their final state instantly.
+ * Achievements grid intro — a pixelated top-to-bottom "render" sweep. Each card
+ * wipes in from its own top edge (clip-path inset bottom 100%→0) with a stepped
+ * ease, and the per-card delay scales with the card's vertical position plus a
+ * small random jitter — so the grid renders in top-to-bottom in chunky, scan-
+ * line fashion rather than a clean line. Reduced motion: cards are simply shown.
  */
 export function achievementsGridIntro(cells: Target) {
-  if (prefersReducedMotion()) return gsap.set(cells, { opacity: 1, scale: 1 });
+  const arr = gsap.utils.toArray<HTMLElement>(cells);
+  if (!arr.length) return gsap.timeline();
+  if (prefersReducedMotion())
+    return gsap.set(arr, { opacity: 1, clipPath: "inset(0% 0% 0% 0%)" });
+
+  const tops = arr.map((el) => el.offsetTop);
+  const maxTop = Math.max(...tops, 1);
   return gsap.fromTo(
-    cells,
-    { opacity: 0, scale: 0.6 },
+    arr,
+    { opacity: 0, clipPath: "inset(0% 0% 100% 0%)" },
     {
       opacity: 1,
-      scale: 1,
+      clipPath: "inset(0% 0% 0% 0%)",
       duration: DURATION.achieveIntro,
-      ease: EASE.achieveIntro,
-      stagger: { each: STAGGER.achieveIntro, grid: "auto", from: "center" },
+      ease: EASE.achievePixel,
+      // Delay = vertical position (top→bottom) + random scatter → pixelated feel.
+      stagger: (i) =>
+        (tops[i] / maxTop) * ACHIEVE.introSweep + Math.random() * ACHIEVE.introJitter,
     },
   );
 }
@@ -526,16 +535,16 @@ export function achievementsIdleWarp(cells: Target) {
  * Achievements pan warp — free 2D panning of `grid` inside `viewport`, driven by
  * GSAP's Observer (wheel / trackpad / drag). The grid glides toward a target
  * position with per-frame easing (inertia + a damped stop), rubber-bands past
- * its bounds and springs back, and shears slightly along the pan velocity (a
- * rubber-sheet warp) that relaxes to flat as motion decays.
+ * its bounds and springs back, and converges (scales slightly toward its center)
+ * in proportion to pan speed, relaxing to scale 1 as motion decays.
  *
  * `grid` is expected to be centered via xPercent/yPercent -50; we only drive its
- * `x`/`y`/`skew`. `getBounds()` returns the max +/- translate on each axis
+ * `x`/`y`/`scale`. `getBounds()` returns the max +/- translate on each axis
  * (recomputed live so it tracks resizes). Returns a cleanup that kills the
  * Observer and detaches the ticker.
  *
  * Reduced motion: panning still works (core navigation preserved) but snaps
- * directly to the target with hard bounds — no inertia, no rubber-band, no skew.
+ * directly to the target with hard bounds — no inertia, no rubber-band, no scale.
  */
 export function achievementsPanWarp(
   viewport: HTMLElement,
@@ -543,11 +552,6 @@ export function achievementsPanWarp(
   getBounds: () => { maxX: number; maxY: number },
 ): () => void {
   const reduce = prefersReducedMotion();
-
-  const setX = gsap.quickSetter(grid, "x", "px");
-  const setY = gsap.quickSetter(grid, "y", "px");
-  const setSkewX = gsap.quickSetter(grid, "skewX", "deg");
-  const setSkewY = gsap.quickSetter(grid, "skewY", "deg");
 
   // px/py = current (rendered) offset, tx/ty = target the input is steering to.
   const s = { px: 0, py: 0, tx: 0, ty: 0 };
@@ -591,19 +595,25 @@ export function achievementsPanWarp(
     onStop: () => applyBounds(true),
   });
 
+  // One gsap.set per frame (not stacked quickSetters) writes x/y/scale together,
+  // and — crucially — preserves the grid's xPercent/yPercent -50 centering,
+  // which we never touch. The grid shrinks toward its center in proportion to
+  // pan speed (a "converge / warp back" feel) and relaxes to scale 1 as the
+  // glide settles to zero velocity.
   const tick = () => {
     const lerp = reduce ? 1 : ACHIEVE.panLerp;
     const nx = s.px + (s.tx - s.px) * lerp;
     const ny = s.py + (s.ty - s.py) * lerp;
-    const vx = nx - s.px; // per-frame velocity → drives the shear
+    const vx = nx - s.px; // per-frame velocity → drives the converge
     const vy = ny - s.py;
     s.px = nx;
     s.py = ny;
-    setX(nx);
-    setY(ny);
-    if (!reduce) {
-      setSkewX(clamp(vy * ACHIEVE.skewScale, ACHIEVE.skewMax));
-      setSkewY(clamp(vx * ACHIEVE.skewScale, ACHIEVE.skewMax));
+    if (reduce) {
+      gsap.set(grid, { x: nx, y: ny });
+    } else {
+      const speed = Math.hypot(vx, vy);
+      const scale = 1 - Math.min(speed * ACHIEVE.convergeScale, ACHIEVE.convergeMax);
+      gsap.set(grid, { x: nx, y: ny, scale });
     }
   };
   gsap.ticker.add(tick);
