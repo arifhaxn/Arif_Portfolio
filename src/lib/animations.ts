@@ -554,7 +554,13 @@ export function achievementsPanWarp(
   const reduce = prefersReducedMotion();
 
   // px/py = current (rendered) offset, tx/ty = target the input is steering to.
-  const s = { px: 0, py: 0, tx: 0, ty: 0 };
+  // Open at the board's TOP-LEFT corner (+maxX moves the board right so the left
+  // section labels are on-screen; +maxY moves it down so the first section sits
+  // at the top, its title tucked just under the fixed navbar). One gsap.set here
+  // avoids a one-frame flash at center before the ticker takes over.
+  const init = getBounds();
+  const s = { px: init.maxX, py: init.maxY, tx: init.maxX, ty: init.maxY };
+  gsap.set(grid, { x: s.px, y: s.py });
 
   const clamp = (v: number, m: number) => Math.max(-m, Math.min(m, v));
   // Rubber-band: motion past a bound is compressed, not blocked. Under reduced

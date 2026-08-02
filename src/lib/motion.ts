@@ -69,8 +69,8 @@ export const ACHIEVE = {
   // Converge-warp: while panning, the whole grid shrinks slightly toward its
   // center (proportional to pan speed) and springs back to 1 at rest — reads as
   // the screen "warping back" to scroll. Replaces the old left/right skew.
-  convergeScale: 0.0018, // pan speed (px/frame) → grid shrink amount
-  convergeMax: 0.07, // max shrink (scale floor = 1 − this)
+  convergeScale: 0.0025, // pan speed (px/frame) → grid shrink amount
+  convergeMax: 0.13, // max shrink (scale floor = 1 − this) — dramatic pull-back
   idleAmp: 10, // idle-warp vertical drift (px) — subtle but perceptible
   idleRotate: 2.6, // idle-warp rotation (deg)
   // Pixelated top→bottom intro sweep.

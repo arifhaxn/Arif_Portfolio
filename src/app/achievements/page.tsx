@@ -136,7 +136,8 @@ export default function AchievementsPage() {
       {/* ===================== Desktop: pannable section board ============== */}
       <div
         ref={panViewport}
-        className="absolute inset-0 z-0 hidden cursor-grab touch-none overflow-hidden active:cursor-grabbing lg:block"
+        // select-none: dragging to pan must not also select/highlight card text.
+        className="absolute inset-0 z-0 hidden cursor-grab touch-none select-none overflow-hidden active:cursor-grabbing lg:block"
       >
         <div ref={grid} className="absolute left-1/2 top-1/2 will-change-transform">
           <div className="flex flex-col gap-20">
