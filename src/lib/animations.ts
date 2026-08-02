@@ -663,15 +663,18 @@ export function achievementsPanWarp(
 
 /**
  * Achievement modal open — the backdrop fades in, the panel zooms up from small,
- * and the certificate image "develops" in with a pixelated entry: a stepped
- * top-to-bottom clip wipe while a blur + contrast/brightness boost resolves to
- * normal, so it snaps from chunky/low-res to sharp. Reduced motion: shown flat.
+ * and the certificate materializes through a PIXEL-BLOCK dissolve: a grid of
+ * opaque tiles covering the image vanish one-by-one in random order (hard
+ * steps(1) cut, no fade), so the content renders in as chunky pixels. This reads
+ * clearly even on the dark placeholder cards (a plain blur/clip wipe did not).
+ * Reduced motion: shown flat, tiles removed instantly.
  */
-export function achievementModalIn(backdrop: Target, panel: Target, imageBox: Target) {
+export function achievementModalIn(backdrop: Target, panel: Target, blocks: Target) {
+  const tiles = gsap.utils.toArray<HTMLElement>(blocks);
   if (prefersReducedMotion()) {
     gsap.set(backdrop, { opacity: 1 });
     gsap.set(panel, { opacity: 1, scale: 1 });
-    gsap.set(imageBox, { opacity: 1, clipPath: "inset(0% 0% 0% 0%)", filter: "none" });
+    gsap.set(tiles, { opacity: 0 });
     return gsap.timeline();
   }
   return gsap
@@ -679,21 +682,55 @@ export function achievementModalIn(backdrop: Target, panel: Target, imageBox: Ta
     .fromTo(backdrop, { opacity: 0 }, { opacity: 1, duration: 0.22, ease: "power2.out" })
     .fromTo(
       panel,
-      { opacity: 0, scale: 0.72 },
+      { opacity: 0, scale: 0.8 },
       { opacity: 1, scale: 1, duration: DURATION.modalPanel, ease: EASE.modalPop },
       0.04,
     )
-    .fromTo(
-      imageBox,
-      { clipPath: "inset(0% 0% 100% 0%)", filter: "blur(10px) contrast(1.8) brightness(1.5)" },
+    .to(
+      tiles,
       {
-        clipPath: "inset(0% 0% 0% 0%)",
-        filter: "blur(0px) contrast(1) brightness(1)",
-        duration: DURATION.modalReveal,
-        ease: EASE.achievePixel,
+        opacity: 0,
+        duration: 0.25,
+        ease: "steps(1)", // hard on/off → each tile pops out, no soft fade
+        stagger: { each: ACHIEVE.pixelBlockEach, from: "random" },
       },
-      0.14,
+      0.16,
     );
+}
+
+/**
+ * Opened-card mouse tilt — the card leans toward the cursor in 3D (rotationX/Y,
+ * eased) as the pointer moves over the modal, and relaxes flat when it leaves.
+ * Desktop/fine-pointer only; no-op under reduced motion or on touch. The panel's
+ * parent must set a `perspective` for the 3D to read. Returns a cleanup.
+ */
+export function achievementCardTilt(panel: HTMLElement, area: HTMLElement): () => void {
+  const fine =
+    typeof window !== "undefined" &&
+    window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  if (prefersReducedMotion() || !fine) return () => {};
+
+  const rotX = gsap.quickTo(panel, "rotationX", { duration: 0.4, ease: "power2.out" });
+  const rotY = gsap.quickTo(panel, "rotationY", { duration: 0.4, ease: "power2.out" });
+  const unit = (v: number) => Math.max(-1, Math.min(1, v));
+
+  const onMove = (e: MouseEvent) => {
+    const r = panel.getBoundingClientRect();
+    const dx = unit((e.clientX - (r.left + r.width / 2)) / (r.width / 2));
+    const dy = unit((e.clientY - (r.top + r.height / 2)) / (r.height / 2));
+    rotY(dx * ACHIEVE.tiltMax);
+    rotX(-dy * ACHIEVE.tiltMax);
+  };
+  const reset = () => {
+    rotX(0);
+    rotY(0);
+  };
+  area.addEventListener("mousemove", onMove);
+  area.addEventListener("mouseleave", reset);
+  return () => {
+    area.removeEventListener("mousemove", onMove);
+    area.removeEventListener("mouseleave", reset);
+  };
 }
 
 /**

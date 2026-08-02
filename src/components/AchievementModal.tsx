@@ -3,11 +3,12 @@
 // -----------------------------------------------------------------------------
 // AchievementModal
 // -----------------------------------------------------------------------------
-// Full-screen lightbox opened by clicking/tapping a certificate card. The panel
-// zooms up and the certificate image "develops" in with a pixelated entry (see
-// `achievementModalIn`). When the achievement has no real `image` yet, an
-// enlarged placeholder shell stands in — dropping an image path into
-// lib/achievements.ts later flips it to the real scan with no change here.
+// Certificate lightbox opened by clicking/tapping a card. A small card floats
+// over the blurred screen: the panel zooms up and the image materializes through
+// a PIXEL-BLOCK dissolve (a grid of tiles pops out one-by-one — see
+// `achievementModalIn`). On desktop the card also mouse-tilts in 3D toward the
+// cursor (`achievementCardTilt`). When the achievement has no real `image` yet,
+// an enlarged placeholder shell stands in.
 //
 // Sits at z-[60] (above the z-50 navbar). Closes on the backdrop, the ✕ button,
 // or Escape — each plays the quick zoom-down before unmounting. Body scroll is
@@ -16,8 +17,17 @@
 
 import { useEffect, useRef } from "react";
 import Image from "next/image";
-import { achievementModalIn, achievementModalOut } from "@/lib/animations";
+import {
+  achievementModalIn,
+  achievementModalOut,
+  achievementCardTilt,
+} from "@/lib/animations";
 import type { Achievement } from "@/lib/achievements";
+
+// Pixel-block dissolve grid over the image (16 × 12 = 192 tiles).
+const PIXEL_COLS = 16;
+const PIXEL_ROWS = 12;
+const PIXEL_TILES = PIXEL_COLS * PIXEL_ROWS;
 
 export function AchievementModal({
   achievement,
@@ -29,20 +39,22 @@ export function AchievementModal({
   const root = useRef<HTMLDivElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
-  const imageBox = useRef<HTMLDivElement>(null);
 
   // Play the close animation, then let the parent unmount us.
   const close = () => achievementModalOut(backdrop.current!, panel.current!, onClose);
 
-  // Entry animation on mount. Deliberately a plain effect that KILLS (not reverts)
-  // on cleanup: React Strict Mode double-invokes effects in dev, and useGSAP's
-  // auto-revert would tear the one-shot entry down and leave it reverted. kill()
-  // just stops the tween, so the re-mounted effect re-applies the from-state and
-  // plays cleanly.
+  // Entry animation + mouse tilt on mount. A plain effect that KILLS (not
+  // reverts) on cleanup: React Strict Mode double-invokes effects in dev, and
+  // useGSAP's auto-revert would tear the one-shot entry down and leave it
+  // reverted (which is why it looked like nothing animated). kill() just stops
+  // the tween, so the re-mounted effect re-applies the from-state and plays.
   useEffect(() => {
-    const tl = achievementModalIn(backdrop.current!, panel.current!, imageBox.current!);
+    const tiles = root.current!.querySelectorAll("[data-block]");
+    const tl = achievementModalIn(backdrop.current!, panel.current!, tiles);
+    const stopTilt = achievementCardTilt(panel.current!, root.current!);
     return () => {
       tl.kill();
+      stopTilt();
     };
   }, []);
 
@@ -68,35 +80,33 @@ export function AchievementModal({
       role="dialog"
       aria-modal="true"
       aria-label={`${achievement.title} certificate`}
-      className="fixed inset-0 z-[60] flex items-center justify-center p-6"
+      // perspective makes the card's 3D mouse-tilt read.
+      className="fixed inset-0 z-[60] flex items-center justify-center p-6 [perspective:1200px]"
     >
-      {/* Backdrop — click to dismiss. Semi-transparent + blurred so the pannable
-          board stays visible (blurred) behind the floating card. */}
+      {/* Backdrop — click to dismiss. Light + strongly blurred so the pannable
+          board clearly shows through (blurred) behind the floating card. */}
       <div
         ref={backdrop}
         onClick={close}
-        className="absolute inset-0 bg-black/50 backdrop-blur-md"
+        className="absolute inset-0 bg-black/35 backdrop-blur-xl"
       />
 
-      {/* Panel — stop propagation so clicks inside don't dismiss. Kept fairly
-          small so it reads as a card floating over the blurred screen. */}
+      {/* Panel — a small card floating over the blurred screen. Stop propagation
+          so clicks inside don't dismiss. */}
       <div
         ref={panel}
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 w-full max-w-lg"
+        className="relative z-10 w-full max-w-lg will-change-transform"
       >
-        {/* Certificate image (or enlarged placeholder). The pixelated entry
-            targets this box. `overflow-hidden` clips the clip-path wipe. */}
-        <div
-          ref={imageBox}
-          className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-gradient-to-br from-zinc-900 via-zinc-950 to-black ring-1 ring-white/15 will-change-[filter,clip-path]"
-        >
+        {/* Certificate image (or enlarged placeholder), with the pixel-block
+            dissolve overlay on top. overflow-hidden clips tiles to the rounding. */}
+        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-gradient-to-br from-zinc-900 via-zinc-950 to-black ring-1 ring-white/15">
           {achievement.image ? (
             <Image
               src={achievement.image}
               alt={`${achievement.title} certificate`}
               fill
-              sizes="(min-width: 768px) 48rem, 90vw"
+              sizes="(min-width: 768px) 32rem, 90vw"
               className="object-cover"
               priority
             />
@@ -111,6 +121,21 @@ export function AchievementModal({
               </span>
             </div>
           )}
+
+          {/* Pixel-block dissolve — tiles start opaque, covering the image, and
+              pop out one-by-one on entry (animated in achievementModalIn). */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 grid gap-px bg-black"
+            style={{
+              gridTemplateColumns: `repeat(${PIXEL_COLS}, minmax(0, 1fr))`,
+              gridTemplateRows: `repeat(${PIXEL_ROWS}, minmax(0, 1fr))`,
+            }}
+          >
+            {Array.from({ length: PIXEL_TILES }).map((_, i) => (
+              <div key={i} data-block className="bg-zinc-800" />
+            ))}
+          </div>
         </div>
 
         {/* Caption row. */}

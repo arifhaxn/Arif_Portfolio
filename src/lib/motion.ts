@@ -84,6 +84,9 @@ export const ACHIEVE = {
   // Pixelated top→bottom intro sweep.
   introSweep: 0.85, // total top-to-bottom stagger spread (s)
   introJitter: 0.12, // random per-cell delay → chunky "rendering" scatter
+  // Opened-card modal.
+  pixelBlockEach: 0.004, // per-tile stagger of the modal pixel-block dissolve
+  tiltMax: 9, // opened-card mouse-tilt max rotation (deg)
 } as const;
 
 /** Stagger values in seconds. */
