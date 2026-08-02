@@ -14,8 +14,8 @@
 //     state instantly instead of animating.
 // -----------------------------------------------------------------------------
 
-import { gsap, ScrollTrigger } from "@/lib/gsap";
-import { DURATION, EASE, OPACITY, SCRUB, STAGGER, START } from "@/lib/motion";
+import { gsap, ScrollTrigger, Observer } from "@/lib/gsap";
+import { ACHIEVE, DURATION, EASE, OPACITY, SCRUB, STAGGER, START } from "@/lib/motion";
 
 type Target = gsap.TweenTarget;
 type Vars = gsap.TweenVars;
@@ -474,6 +474,145 @@ export function playgroundCellShuffle(cell: Target, onSwap?: () => void) {
 // -----------------------------------------------------------------------------
 // Route transition
 // -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+// Achievements grid — intro / idle warp / pan warp
+// -----------------------------------------------------------------------------
+// These power the /achievements route's "liquid" certificate grid. They target
+// plain DOM cells (no WebGL) and, like every helper here, honor reduced motion.
+
+/**
+ * Achievements grid intro — cells punch in with a snappy scale + fade, the
+ * stagger radiating out from the grid center (GSAP infers the grid from the
+ * cells' laid-out positions, so this works for any column count). Reduced
+ * motion: cells are set to their final state instantly.
+ */
+export function achievementsGridIntro(cells: Target) {
+  if (prefersReducedMotion()) return gsap.set(cells, { opacity: 1, scale: 1 });
+  return gsap.fromTo(
+    cells,
+    { opacity: 0, scale: 0.6 },
+    {
+      opacity: 1,
+      scale: 1,
+      duration: DURATION.achieveIntro,
+      ease: EASE.achieveIntro,
+      stagger: { each: STAGGER.achieveIntro, grid: "auto", from: "center" },
+    },
+  );
+}
+
+/**
+ * Achievements idle warp — a continuous, low-amplitude "breathing" ripple so the
+ * grid never sits perfectly still. A random-origin stagger with a long per-cell
+ * offset means only a handful of cells are ever mid-motion at once. Drifts `y`
+ * and `rotation` only (NOT scale) so it never fights the intro's scale or the
+ * CSS hover scale on the inner card. Reduced motion: no-op (grid stays static).
+ */
+export function achievementsIdleWarp(cells: Target) {
+  if (prefersReducedMotion()) return gsap.timeline();
+  return gsap.to(cells, {
+    y: `+=${ACHIEVE.idleAmp}`,
+    rotation: ACHIEVE.idleRotate,
+    duration: DURATION.achieveIdle,
+    ease: EASE.ghost, // sine.inOut — the site's gentle ambient curve
+    yoyo: true,
+    repeat: -1,
+    stagger: { each: 0.25, from: "random" },
+  });
+}
+
+/**
+ * Achievements pan warp — free 2D panning of `grid` inside `viewport`, driven by
+ * GSAP's Observer (wheel / trackpad / drag). The grid glides toward a target
+ * position with per-frame easing (inertia + a damped stop), rubber-bands past
+ * its bounds and springs back, and shears slightly along the pan velocity (a
+ * rubber-sheet warp) that relaxes to flat as motion decays.
+ *
+ * `grid` is expected to be centered via xPercent/yPercent -50; we only drive its
+ * `x`/`y`/`skew`. `getBounds()` returns the max +/- translate on each axis
+ * (recomputed live so it tracks resizes). Returns a cleanup that kills the
+ * Observer and detaches the ticker.
+ *
+ * Reduced motion: panning still works (core navigation preserved) but snaps
+ * directly to the target with hard bounds — no inertia, no rubber-band, no skew.
+ */
+export function achievementsPanWarp(
+  viewport: HTMLElement,
+  grid: HTMLElement,
+  getBounds: () => { maxX: number; maxY: number },
+): () => void {
+  const reduce = prefersReducedMotion();
+
+  const setX = gsap.quickSetter(grid, "x", "px");
+  const setY = gsap.quickSetter(grid, "y", "px");
+  const setSkewX = gsap.quickSetter(grid, "skewX", "deg");
+  const setSkewY = gsap.quickSetter(grid, "skewY", "deg");
+
+  // px/py = current (rendered) offset, tx/ty = target the input is steering to.
+  const s = { px: 0, py: 0, tx: 0, ty: 0 };
+
+  const clamp = (v: number, m: number) => Math.max(-m, Math.min(m, v));
+  // Rubber-band: motion past a bound is compressed, not blocked. Under reduced
+  // motion we hard-clamp instead (no elastic overshoot).
+  const rubber = (v: number, m: number) => {
+    if (reduce) return clamp(v, m);
+    if (v > m) return m + (v - m) * ACHIEVE.edgeResist;
+    if (v < -m) return -m + (v + m) * ACHIEVE.edgeResist;
+    return v;
+  };
+  const applyBounds = (hard: boolean) => {
+    const { maxX, maxY } = getBounds();
+    s.tx = hard ? clamp(s.tx, maxX) : rubber(s.tx, maxX);
+    s.ty = hard ? clamp(s.ty, maxY) : rubber(s.ty, maxY);
+  };
+
+  const obs = Observer.create({
+    target: viewport,
+    type: "wheel,touch,pointer",
+    dragMinimum: 2,
+    tolerance: 4,
+    preventDefault: true,
+    // Wheel/trackpad: grid moves OPPOSITE the scroll (content scrolls away).
+    onWheel: (self) => {
+      s.tx -= self.deltaX * ACHIEVE.panFactor;
+      s.ty -= self.deltaY * ACHIEVE.panFactor;
+      applyBounds(false);
+    },
+    // Drag: grid follows the pointer/finger (grab-and-pull).
+    onDrag: (self) => {
+      s.tx += self.deltaX * ACHIEVE.panFactor;
+      s.ty += self.deltaY * ACHIEVE.panFactor;
+      applyBounds(false);
+    },
+    // On release / when input settles, snap the target inside bounds so any
+    // rubber-band overshoot springs back.
+    onDragEnd: () => applyBounds(true),
+    onStop: () => applyBounds(true),
+  });
+
+  const tick = () => {
+    const lerp = reduce ? 1 : ACHIEVE.panLerp;
+    const nx = s.px + (s.tx - s.px) * lerp;
+    const ny = s.py + (s.ty - s.py) * lerp;
+    const vx = nx - s.px; // per-frame velocity → drives the shear
+    const vy = ny - s.py;
+    s.px = nx;
+    s.py = ny;
+    setX(nx);
+    setY(ny);
+    if (!reduce) {
+      setSkewX(clamp(vy * ACHIEVE.skewScale, ACHIEVE.skewMax));
+      setSkewY(clamp(vx * ACHIEVE.skewScale, ACHIEVE.skewMax));
+    }
+  };
+  gsap.ticker.add(tick);
+
+  return () => {
+    obs.kill();
+    gsap.ticker.remove(tick);
+  };
+}
 
 /**
  * Route transition wipe — a full-screen overlay scales in from the bottom

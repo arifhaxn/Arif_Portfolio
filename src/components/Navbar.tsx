@@ -15,14 +15,19 @@
 // -----------------------------------------------------------------------------
 
 import { useRef } from "react";
+import Link from "next/link";
 import { useGSAP } from "@/lib/gsap";
 import { navIntro } from "@/lib/animations";
 
+// Navbar is global (root layout), so the homepage-section links use a "/#anchor"
+// form: from any route a native <Link> navigates HOME and then scrolls to the
+// anchor (Next.js handles both in one client transition). "Achievements" is now
+// its own real route.
 const LINKS = [
-  { label: "Projects", href: "#projects" },
-  { label: "About", href: "#about" },
-  { label: "Playground", href: "#playground" },
-  { label: "Contact", href: "#contact" },
+  { label: "Projects", href: "/#projects" },
+  { label: "About", href: "/#about" },
+  { label: "Achievements", href: "/achievements" },
+  { label: "Contact", href: "/#contact" },
 ];
 
 export function Navbar() {
@@ -46,25 +51,25 @@ export function Navbar() {
       className="fixed inset-x-0 top-0 z-50 flex items-center justify-between bg-black/70 px-6 py-5 backdrop-blur-md sm:px-10"
     >
       {/* Logo mark — text initials, first item in the stagger */}
-      <a
+      <Link
         data-nav-item
-        href="#"
+        href="/"
         className="text-sm font-semibold tracking-[0.2em] text-white"
       >
         AH
-      </a>
+      </Link>
 
       {/* Nav links — each its own stagger step */}
       <nav className="flex items-center gap-6 sm:gap-8">
         {LINKS.map((link) => (
-          <a
+          <Link
             key={link.href}
             data-nav-item
             href={link.href}
             className="text-xs font-medium uppercase tracking-[0.15em] text-zinc-400 transition-colors hover:text-white sm:text-sm"
           >
             {link.label}
-          </a>
+          </Link>
         ))}
       </nav>
     </header>

@@ -12,12 +12,13 @@
 
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { Observer } from "gsap/Observer";
 import { useGSAP } from "@gsap/react";
 
 // Register plugins only on the client. In the App Router this file can be pulled
 // into the server graph, so we must not touch browser-only plugin internals there.
 if (typeof window !== "undefined") {
-  gsap.registerPlugin(ScrollTrigger, useGSAP);
+  gsap.registerPlugin(ScrollTrigger, Observer, useGSAP);
 
   // Project-wide defaults so individual tweens can stay terse. These mirror the
   // "house style" of the motion spec (fast, eased, no accidental overshoot).
@@ -30,4 +31,4 @@ if (typeof window !== "undefined") {
   ScrollTrigger.config({ ignoreMobileResize: true });
 }
 
-export { gsap, ScrollTrigger, useGSAP };
+export { gsap, ScrollTrigger, Observer, useGSAP };

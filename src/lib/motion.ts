@@ -21,6 +21,7 @@ export const EASE = {
   ghost: "sine.inOut", // About ghost-text cycle
   cardSwap: "power3.inOut", // Award thumbnail card swap
   cardSwapBack: "back.out(1.3)", // Award card swap (overshoot variant)
+  achieveIntro: "back.out(1.6)", // Achievements grid punch-in (scale overshoot)
   linear: "none", // Parallax scrubs — must be linear
 } as const;
 
@@ -44,10 +45,32 @@ export const DURATION = {
   cardSwap: 0.55, // 0.5–0.6s
   playgroundCell: 0.15, // 0.1–0.2s per cell
   bgZoom: 0.9, // 0.8–1s — Projects background polyhedron zoom-in
+  achieveIntro: 0.5, // Achievements grid cell punch-in
+  achieveIdle: 3.2, // Achievements idle-warp half-cycle (sine yoyo)
 } as const;
 
 /** Resting opacity of the Projects background polyhedron (ambient, not focal). */
 export const BG_SHAPE_OPACITY = 0.45;
+
+/**
+ * Achievements grid — pan/warp + idle-drift tuning. Kept together so the whole
+ * "liquid grid" feel can be re-tuned in one place. `panFactor` scales raw input
+ * deltas into translate px; `panLerp` is the per-frame easing toward the target
+ * (gives the inertial glide + damped stop); `edgeResist` is the rubber-band
+ * compression applied to motion past a boundary; `skewScale`/`skewMax` turn
+ * pan velocity into a bounded rubber-sheet shear; the `idle*` values drive the
+ * ambient "alive" ripple. All consumed by the achievements* helpers below.
+ */
+export const ACHIEVE = {
+  panFactor: 1, // input delta (px) → grid translate (px)
+  panLerp: 0.12, // ease toward target per frame (inertia + damped stop)
+  edgeResist: 0.32, // rubber-band compression when panned past a bound
+  edgePad: 40, // extra px of pan slack beyond the exact edge
+  skewScale: 0.45, // pan velocity (px/frame) → skew degrees
+  skewMax: 7, // clamp on the velocity-driven skew (deg)
+  idleAmp: 4, // idle-warp vertical drift (px)
+  idleRotate: 1.4, // idle-warp rotation (deg)
+} as const;
 
 /** Stagger values in seconds. */
 export const STAGGER = {
@@ -57,6 +80,7 @@ export const STAGGER = {
   reveal: 0.09, // 0.08–0.1s
   thumb: 0.05, // 0.05s
   badge: 0.05, // 0.05s per chip
+  achieveIntro: 0.035, // Achievements grid punch-in, radiating from center
 } as const;
 
 /** ScrollTrigger scrub values (seconds of "catch-up" lag). */

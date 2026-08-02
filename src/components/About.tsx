@@ -11,9 +11,10 @@
 // `scrollReveal` pattern; small floating props drift near the robot via
 // `floatLoop`. HUD corners (live clock/status + coding-since meta) match Hero's.
 //
+// Achievements moved to their own /achievements route — no longer a block here.
+//
 // PLACEHOLDERS awaiting real content from the site owner (also see summary):
 //   • Bio paragraph — DRAFT, to be rewritten in the owner's voice.
-//   • Achievements — intentionally EMPTY slots; do not invent awards.
 //   • Coding-since year — "20XX" in components/Hud.tsx (CODING_SINCE_YEAR).
 // -----------------------------------------------------------------------------
 
@@ -54,7 +55,6 @@ export function About() {
       // as it enters the viewport (same tokens/easing site-wide).
       scrollReveal("[data-about-intro]");
       scrollReveal("[data-skill-cat]", { y: 24 });
-      scrollReveal("[data-achievement]", { y: 24 });
       scrollReveal("[data-connect]", { y: 24 });
 
       // Ambient drift on the floating props near the robot.
@@ -156,31 +156,8 @@ export function About() {
         </div>
       </div>
 
-      {/* ================= Achievements (intentionally empty) =============== */}
-      {/* ⚠ PLACEHOLDER — no achievements content yet. These are empty slots
-          awaiting real awards/accomplishments from the site owner; nothing here
-          is to be invented. */}
-      <div className="mx-auto max-w-4xl py-24">
-        <p
-          data-achievement
-          className="mb-10 text-xs font-medium uppercase tracking-[0.3em] text-zinc-500"
-        >
-          / Achievements
-        </p>
-        <div className="grid gap-6 sm:grid-cols-3">
-          {[1, 2, 3].map((slot) => (
-            <div
-              key={slot}
-              data-achievement
-              className="flex h-28 items-center justify-center rounded-xl border border-dashed border-zinc-800"
-            >
-              <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">
-                Coming soon
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Achievements now live on their own /achievements route (linked from the
+          navbar), so the old placeholder block that sat here has been removed. */}
 
       {/* ================= Connect (single home for socials) ================ */}
       {/* id="contact": the nav's CONTACT link lands here — socials live in this

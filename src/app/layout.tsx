@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SmoothScrollProvider } from "@/components/providers/SmoothScrollProvider";
+import { Navbar } from "@/components/Navbar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,8 +35,13 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         {/* Lenis + GSAP ticker are set up once, here at the root, so every route
-            inherits smooth scrolling and a synced ScrollTrigger. */}
-        <SmoothScrollProvider>{children}</SmoothScrollProvider>
+            inherits smooth scrolling and a synced ScrollTrigger. The Navbar also
+            lives here (not per-page) so it persists identically across every
+            route — the homepage sections and the /achievements page alike. */}
+        <SmoothScrollProvider>
+          <Navbar />
+          {children}
+        </SmoothScrollProvider>
       </body>
     </html>
   );
