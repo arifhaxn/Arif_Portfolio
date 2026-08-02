@@ -23,9 +23,9 @@ export type AchievementCategory =
 /** Display order of the category sections. */
 export const CATEGORIES: AchievementCategory[] = [
   "Hackathons",
-  "Courses",
-  "Volunteering",
   "Research",
+  "Volunteering",
+  "Courses",
 ];
 
 export type Achievement = {
