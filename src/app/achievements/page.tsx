@@ -23,7 +23,7 @@
 // time the focused cell actually changes.
 // -----------------------------------------------------------------------------
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { gsap, useGSAP } from "@/lib/gsap";
 import {
   achievementsGridIntro,
@@ -32,8 +32,13 @@ import {
   scrollReveal,
 } from "@/lib/animations";
 import { ACHIEVE } from "@/lib/motion";
-import { ACHIEVEMENTS, achievementsByCategory } from "@/lib/achievements";
+import {
+  ACHIEVEMENTS,
+  achievementsByCategory,
+  type Achievement,
+} from "@/lib/achievements";
 import { AchievementCard } from "@/components/AchievementCard";
+import { AchievementModal } from "@/components/AchievementModal";
 
 // Card geometry — kept at the original compact size/spacing. All sections use
 // the same column count so their grids left-align to a consistent width; stacked
@@ -56,6 +61,16 @@ export default function AchievementsPage() {
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const focusedRef = useRef<string | null>(null);
 
+  // Clicked certificate → opens the zoom modal (null = closed).
+  const [selected, setSelected] = useState<Achievement | null>(null);
+  // Pointer-down position, to tell a click (open modal) from a drag (pan).
+  const downPos = useRef<{ x: number; y: number } | null>(null);
+  const openIfClick = (a: Achievement, e: ReactPointerEvent) => {
+    const d = downPos.current;
+    downPos.current = null;
+    if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) setSelected(a);
+  };
+
   // ELAPSED — tick once a second from mount (mirrors Hud.tsx's live clock idea).
   useEffect(() => {
     const id = setInterval(() => setElapsed((s) => s + 1), 1000);
@@ -68,8 +83,6 @@ export default function AchievementsPage() {
     focusedRef.current = id;
     setFocusedId(id);
   };
-  // Mobile tap toggles focus for the tapped card.
-  const toggle = (id: string) => focus(focusedRef.current === id ? null : id);
 
   useGSAP(
     () => {
@@ -164,6 +177,10 @@ export default function AchievementsPage() {
                       className="will-change-transform"
                       onMouseEnter={() => focus(a.id)}
                       onMouseLeave={() => focus(null)}
+                      onPointerDown={(e) => {
+                        downPos.current = { x: e.clientX, y: e.clientY };
+                      }}
+                      onPointerUp={(e) => openIfClick(a, e)}
                     >
                       <AchievementCard achievement={a} focused={focusedId === a.id} />
                     </div>
@@ -225,7 +242,7 @@ export default function AchievementsPage() {
                   key={a.id}
                   data-mobile-card
                   className="h-44"
-                  onClick={() => toggle(a.id)}
+                  onClick={() => setSelected(a)}
                 >
                   <AchievementCard achievement={a} focused={focusedId === a.id} />
                 </div>
@@ -234,6 +251,14 @@ export default function AchievementsPage() {
           </section>
         ))}
       </div>
+
+      {/* Click-to-zoom certificate lightbox (pixelated entry). */}
+      {selected && (
+        <AchievementModal
+          achievement={selected}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </main>
   );
 }

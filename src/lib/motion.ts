@@ -22,6 +22,7 @@ export const EASE = {
   cardSwap: "power3.inOut", // Award thumbnail card swap
   cardSwapBack: "back.out(1.3)", // Award card swap (overshoot variant)
   achievePixel: "steps(7)", // Achievements pixelated top→bottom render sweep
+  modalPop: "back.out(1.6)", // Achievement modal zoom-up
   linear: "none", // Parallax scrubs — must be linear
 } as const;
 
@@ -47,6 +48,8 @@ export const DURATION = {
   bgZoom: 0.9, // 0.8–1s — Projects background polyhedron zoom-in
   achieveIntro: 0.5, // Achievements grid cell punch-in
   achieveIdle: 3.2, // Achievements idle-warp half-cycle (sine yoyo)
+  modalPanel: 0.4, // Achievement modal zoom-up
+  modalReveal: 0.6, // Achievement modal pixelated image reveal
 } as const;
 
 /** Resting opacity of the Projects background polyhedron (ambient, not focal). */

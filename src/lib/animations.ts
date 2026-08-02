@@ -631,6 +631,53 @@ export function achievementsPanWarp(
 }
 
 /**
+ * Achievement modal open — the backdrop fades in, the panel zooms up from small,
+ * and the certificate image "develops" in with a pixelated entry: a stepped
+ * top-to-bottom clip wipe while a blur + contrast/brightness boost resolves to
+ * normal, so it snaps from chunky/low-res to sharp. Reduced motion: shown flat.
+ */
+export function achievementModalIn(backdrop: Target, panel: Target, imageBox: Target) {
+  if (prefersReducedMotion()) {
+    gsap.set(backdrop, { opacity: 1 });
+    gsap.set(panel, { opacity: 1, scale: 1 });
+    gsap.set(imageBox, { opacity: 1, clipPath: "inset(0% 0% 0% 0%)", filter: "none" });
+    return gsap.timeline();
+  }
+  return gsap
+    .timeline()
+    .fromTo(backdrop, { opacity: 0 }, { opacity: 1, duration: 0.22, ease: "power2.out" })
+    .fromTo(
+      panel,
+      { opacity: 0, scale: 0.72 },
+      { opacity: 1, scale: 1, duration: DURATION.modalPanel, ease: EASE.modalPop },
+      0.04,
+    )
+    .fromTo(
+      imageBox,
+      { clipPath: "inset(0% 0% 100% 0%)", filter: "blur(10px) contrast(1.8) brightness(1.5)" },
+      {
+        clipPath: "inset(0% 0% 0% 0%)",
+        filter: "blur(0px) contrast(1) brightness(1)",
+        duration: DURATION.modalReveal,
+        ease: EASE.achievePixel,
+      },
+      0.14,
+    );
+}
+
+/**
+ * Achievement modal close — quick zoom-down + fade, then `onDone` (the caller
+ * unmounts). Reduced motion: unmount immediately.
+ */
+export function achievementModalOut(backdrop: Target, panel: Target, onDone: () => void) {
+  if (prefersReducedMotion()) return onDone();
+  gsap
+    .timeline({ onComplete: onDone })
+    .to(panel, { opacity: 0, scale: 0.85, duration: 0.18, ease: "power2.in" }, 0)
+    .to(backdrop, { opacity: 0, duration: 0.2, ease: "power2.in" }, 0);
+}
+
+/**
  * Route transition wipe — a full-screen overlay scales in from the bottom
  * (scaleY 0→1), covers the screen, then scales away off the top (1→0). Feed the
  * midpoint (`onCover`) the actual navigation so the new page is behind the cover.
