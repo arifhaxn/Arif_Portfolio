@@ -577,6 +577,15 @@ export function achievementsPanWarp(
     s.ty = hard ? clamp(s.ty, maxY) : rubber(s.ty, maxY);
   };
 
+  // Idle auto-scroll bookkeeping: frames since the last real input, and the
+  // current vertical drift direction (-1 = board moves up / content scrolls down;
+  // starts by scrolling down from the top-left open position).
+  let sinceInput = 0;
+  let driftDir = -1;
+  const noteInput = () => {
+    sinceInput = 0;
+  };
+
   const obs = Observer.create({
     target: viewport,
     type: "wheel,touch,pointer",
@@ -585,16 +594,19 @@ export function achievementsPanWarp(
     preventDefault: true,
     // Wheel/trackpad: grid moves OPPOSITE the scroll (content scrolls away).
     onWheel: (self) => {
+      noteInput();
       s.tx -= self.deltaX * ACHIEVE.panFactor;
       s.ty -= self.deltaY * ACHIEVE.panFactor;
       applyBounds(false);
     },
     // Drag: grid follows the pointer/finger (grab-and-pull).
     onDrag: (self) => {
+      noteInput();
       s.tx += self.deltaX * ACHIEVE.panFactor;
       s.ty += self.deltaY * ACHIEVE.panFactor;
       applyBounds(false);
     },
+    onPress: noteInput,
     // On release / when input settles, snap the target inside bounds so any
     // rubber-band overshoot springs back.
     onDragEnd: () => applyBounds(true),
@@ -607,6 +619,25 @@ export function achievementsPanWarp(
   // pan speed (a "converge / warp back" feel) and relaxes to scale 1 as the
   // glide settles to zero velocity.
   const tick = () => {
+    // Ambient idle auto-scroll: after a pause with no input, slowly drift the
+    // vertical target, ping-ponging between the bounds. Disabled under reduced
+    // motion. The slow drift keeps per-frame velocity tiny, so it never triggers
+    // the converge shrink.
+    if (!reduce) {
+      sinceInput++;
+      if (sinceInput > ACHIEVE.idleScrollFrames) {
+        const { maxY } = getBounds();
+        s.ty += ACHIEVE.idleScrollSpeed * driftDir;
+        if (s.ty <= -maxY) {
+          s.ty = -maxY;
+          driftDir = 1;
+        } else if (s.ty >= maxY) {
+          s.ty = maxY;
+          driftDir = -1;
+        }
+      }
+    }
+
     const lerp = reduce ? 1 : ACHIEVE.panLerp;
     const nx = s.px + (s.tx - s.px) * lerp;
     const ny = s.py + (s.ty - s.py) * lerp;

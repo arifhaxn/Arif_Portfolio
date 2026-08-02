@@ -76,6 +76,11 @@ export const ACHIEVE = {
   convergeMax: 0.2, // max shrink (scale floor = 1 − this) — dramatic pull-back
   idleAmp: 10, // idle-warp vertical drift (px) — subtle but perceptible
   idleRotate: 2.6, // idle-warp rotation (deg)
+  // Ambient idle auto-scroll: after a short pause with no input, the board
+  // slowly drifts vertically (ping-ponging between its bounds) so the page is
+  // never fully static — a gentle "slow scroll" tour of the sections.
+  idleScrollFrames: 90, // frames of no input before auto-scroll begins (~1.5s)
+  idleScrollSpeed: 0.35, // px/frame drift (~21px/s) — slow and calm
   // Pixelated top→bottom intro sweep.
   introSweep: 0.85, // total top-to-bottom stagger spread (s)
   introJitter: 0.12, // random per-cell delay → chunky "rendering" scatter

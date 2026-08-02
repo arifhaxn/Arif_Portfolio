@@ -16,7 +16,6 @@
 
 import { useEffect, useRef } from "react";
 import Image from "next/image";
-import { useGSAP } from "@/lib/gsap";
 import { achievementModalIn, achievementModalOut } from "@/lib/animations";
 import type { Achievement } from "@/lib/achievements";
 
@@ -32,15 +31,20 @@ export function AchievementModal({
   const panel = useRef<HTMLDivElement>(null);
   const imageBox = useRef<HTMLDivElement>(null);
 
-  useGSAP(
-    () => {
-      achievementModalIn(backdrop.current!, panel.current!, imageBox.current!);
-    },
-    { scope: root },
-  );
-
   // Play the close animation, then let the parent unmount us.
   const close = () => achievementModalOut(backdrop.current!, panel.current!, onClose);
+
+  // Entry animation on mount. Deliberately a plain effect that KILLS (not reverts)
+  // on cleanup: React Strict Mode double-invokes effects in dev, and useGSAP's
+  // auto-revert would tear the one-shot entry down and leave it reverted. kill()
+  // just stops the tween, so the re-mounted effect re-applies the from-state and
+  // plays cleanly.
+  useEffect(() => {
+    const tl = achievementModalIn(backdrop.current!, panel.current!, imageBox.current!);
+    return () => {
+      tl.kill();
+    };
+  }, []);
 
   // Escape to close + lock body scroll while open.
   useEffect(() => {
@@ -66,18 +70,20 @@ export function AchievementModal({
       aria-label={`${achievement.title} certificate`}
       className="fixed inset-0 z-[60] flex items-center justify-center p-6"
     >
-      {/* Backdrop — click to dismiss. */}
+      {/* Backdrop — click to dismiss. Semi-transparent + blurred so the pannable
+          board stays visible (blurred) behind the floating card. */}
       <div
         ref={backdrop}
         onClick={close}
-        className="absolute inset-0 bg-black/85 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/50 backdrop-blur-md"
       />
 
-      {/* Panel — stop propagation so clicks inside don't dismiss. */}
+      {/* Panel — stop propagation so clicks inside don't dismiss. Kept fairly
+          small so it reads as a card floating over the blurred screen. */}
       <div
         ref={panel}
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 w-full max-w-3xl"
+        className="relative z-10 w-full max-w-lg"
       >
         {/* Certificate image (or enlarged placeholder). The pixelated entry
             targets this box. `overflow-hidden` clips the clip-path wipe. */}
