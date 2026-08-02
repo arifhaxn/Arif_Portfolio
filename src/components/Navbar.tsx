@@ -18,6 +18,7 @@ import { useRef } from "react";
 import Link from "next/link";
 import { useGSAP } from "@/lib/gsap";
 import { navIntro } from "@/lib/animations";
+import { ScrambleText } from "@/components/ScrambleText";
 
 // Navbar is global (root layout), so the homepage-section links use a "/#anchor"
 // form: from any route a native <Link> navigates HOME and then scrolls to the
@@ -68,7 +69,8 @@ export function Navbar() {
             href={link.href}
             className="text-xs font-medium uppercase tracking-[0.15em] text-zinc-400 transition-colors hover:text-white sm:text-sm"
           >
-            {link.label}
+            {/* Entrance driven by navIntro (data-nav-item); hover replays. */}
+            <ScrambleText>{link.label}</ScrambleText>
           </Link>
         ))}
       </nav>

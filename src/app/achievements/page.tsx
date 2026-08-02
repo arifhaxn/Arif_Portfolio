@@ -39,6 +39,7 @@ import {
 } from "@/lib/achievements";
 import { AchievementCard } from "@/components/AchievementCard";
 import { AchievementModal } from "@/components/AchievementModal";
+import { ScrambleText } from "@/components/ScrambleText";
 
 // Card geometry — kept at the original compact size/spacing. All sections use
 // the same column count so their grids left-align to a consistent width; stacked
@@ -196,9 +197,13 @@ export default function AchievementsPage() {
           pointer-events-none so they never intercept a drag/wheel on the grid. */}
       {/* Bottom-left: section label. */}
       <div className="pointer-events-none absolute bottom-8 left-6 z-20 hidden sm:left-10 lg:block">
-        <h1 className="font-mono text-sm font-semibold uppercase tracking-[0.2em] text-white">
+        <ScrambleText
+          as="h1"
+          entrance="observer"
+          className="font-mono text-sm font-semibold uppercase tracking-[0.2em] text-white"
+        >
           / Achievements
-        </h1>
+        </ScrambleText>
         <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
           — Certificates &amp; credentials
         </p>
@@ -217,10 +222,20 @@ export default function AchievementsPage() {
 
       {/* ==================== Mobile: stacked sections ===================== */}
       <div className="px-6 pb-24 pt-28 lg:hidden">
-        <p className="text-xs font-medium uppercase tracking-[0.3em] text-zinc-500">
+        <ScrambleText
+          as="p"
+          entrance="observer"
+          className="text-xs font-medium uppercase tracking-[0.3em] text-zinc-500"
+        >
           / Achievements
-        </p>
-        <h1 className="mt-2 text-4xl font-semibold tracking-tight">Achievements</h1>
+        </ScrambleText>
+        <ScrambleText
+          as="h1"
+          entrance="observer"
+          className="mt-2 text-4xl font-semibold tracking-tight"
+        >
+          Achievements
+        </ScrambleText>
         <p className="mt-1 text-sm text-zinc-400">— Certificates &amp; credentials</p>
         <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
           <span className="tabular-nums text-zinc-300">

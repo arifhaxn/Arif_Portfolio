@@ -16,6 +16,7 @@
 
 import Image from "next/image";
 import type { Achievement } from "@/lib/achievements";
+import { ScrambleText } from "@/components/ScrambleText";
 
 export function AchievementCard({
   achievement,
@@ -58,7 +59,13 @@ export function AchievementCard({
           focused ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
         }`}
       >
-        <p className="text-sm font-medium text-white">{achievement.title}</p>
+        <ScrambleText
+          as="p"
+          entrance="observer"
+          className="text-sm font-medium text-white"
+        >
+          {achievement.title}
+        </ScrambleText>
         <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-400">
           {achievement.issuer}
         </p>

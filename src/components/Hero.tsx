@@ -21,6 +21,7 @@ import dynamic from "next/dynamic";
 import { useGSAP } from "@/lib/gsap";
 import { navIntro } from "@/lib/animations";
 import { CodingSince, LiveStatus } from "@/components/Hud";
+import { ScrambleText } from "@/components/ScrambleText";
 
 // ssr:false — the WebGL canvas is client-only. The sized wrapper below reserves
 // the space so there's no layout shift while it loads.
@@ -65,26 +66,34 @@ export function Hero() {
       </div>
 
       {/* --- Nameplate / heading (below the visual) -------------------------- */}
+      {/* Each line is a ScrambleText; navIntro (data-hero-line) drives the
+          entrance scramble in sync with the fade+rise, and hover replays. */}
       <div className="flex flex-col items-center gap-2">
-        <p
+        <ScrambleText
+          as="p"
           data-hero-line
           className="text-xs font-medium uppercase tracking-[0.3em] text-zinc-500"
         >
           / Full-Stack Developer
-        </p>
+        </ScrambleText>
         <h1
           data-hero-line
           className="text-5xl font-semibold tracking-tight text-white sm:text-7xl"
         >
-          <span className="block">Arif</span>
-          <span className="block">Hasan</span>
+          <ScrambleText as="span" className="block">
+            Arif
+          </ScrambleText>
+          <ScrambleText as="span" className="block">
+            Hasan
+          </ScrambleText>
         </h1>
-        <p
+        <ScrambleText
+          as="p"
           data-hero-line
           className="max-w-md text-sm text-zinc-400 sm:text-base"
         >
-          Designer &amp; developer building motion-led interfaces.
-        </p>
+          Designer & developer building motion-led interfaces.
+        </ScrambleText>
       </div>
 
       {/* --- HUD corners (shared with About) --------------------------------- */}

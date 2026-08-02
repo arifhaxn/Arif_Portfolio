@@ -89,6 +89,26 @@ export const ACHIEVE = {
   tiltMax: 9, // opened-card mouse-tilt max rotation (deg)
 } as const;
 
+/**
+ * Text-scramble / decode effect (see ScrambleText + `scrambleText`). Characters
+ * cycle through random glyphs and lock in left-to-right. `duration` is the reveal
+ * speed per element; `sweep` is the fraction of the timeline the L→R lock points
+ * span; `jitter` is the random per-character offset around that sweep so the
+ * lock-in isn't mechanically uniform; `glyphFps` throttles how often unlocked
+ * glyphs re-randomize. Character sets are case-matched (a token, not hardcoded):
+ * uppercase originals scramble through `upper`, lowercase through `lower`, digits
+ * through `digits`; punctuation/other characters are left as-is (spaces too).
+ */
+export const SCRAMBLE = {
+  duration: 0.6, // total scramble time per element
+  sweep: 0.65, // fraction of the timeline the L→R lock sweep spans (0..1)
+  jitter: 0.22, // random per-character lock jitter
+  glyphFps: 26, // unlocked-glyph re-randomize rate (throttled below 60fps)
+  upper: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+  lower: "abcdefghijklmnopqrstuvwxyz",
+  digits: "0123456789",
+} as const;
+
 /** Stagger values in seconds. */
 export const STAGGER = {
   nav: 0.075, // 0.05–0.1s

@@ -23,6 +23,7 @@ import dynamic from "next/dynamic";
 import { useGSAP } from "@/lib/gsap";
 import { floatLoop, scrollReveal } from "@/lib/animations";
 import { CodingSince, LiveStatus } from "@/components/Hud";
+import { ScrambleText } from "@/components/ScrambleText";
 
 const HeroHead = dynamic(
   () => import("@/components/HeroHead").then((m) => m.HeroHead),
@@ -97,18 +98,20 @@ export function About() {
 
         {/* Eyebrow → large heading → bio, mirroring the Hero's type stack. */}
         <div className="flex max-w-2xl flex-col items-center gap-4">
-          <p
+          <ScrambleText
+            as="p"
             data-about-intro
             className="text-xs font-medium uppercase tracking-[0.3em] text-zinc-500"
           >
             / About
-          </p>
-          <h2
+          </ScrambleText>
+          <ScrambleText
+            as="h2"
             data-about-intro
             className="text-4xl font-semibold tracking-tight text-white sm:text-6xl"
           >
             Building. Learning. Shipping.
-          </h2>
+          </ScrambleText>
           {/*
             ⚠ DRAFT BIO — placeholder copy assembled from confirmed facts only.
             The site owner will rewrite this in his own voice.
@@ -132,12 +135,13 @@ export function About() {
 
       {/* ================= Skills =========================================== */}
       <div className="mx-auto max-w-4xl py-24">
-        <p
+        <ScrambleText
+          as="p"
           data-skill-cat
           className="mb-10 text-xs font-medium uppercase tracking-[0.3em] text-zinc-500"
         >
           / Skills
-        </p>
+        </ScrambleText>
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-3">
           {SKILLS.map((cat) => (
             <div key={cat.label} data-skill-cat className="flex flex-col gap-3">
@@ -163,12 +167,13 @@ export function About() {
       {/* id="contact": the nav's CONTACT link lands here — socials live in this
           one block only, so there's no duplicated contact content elsewhere. */}
       <div id="contact" className="mx-auto max-w-4xl scroll-mt-24 pb-32 pt-24">
-        <p
+        <ScrambleText
+          as="p"
           data-connect
           className="mb-10 text-xs font-medium uppercase tracking-[0.3em] text-zinc-500"
         >
           / Connect
-        </p>
+        </ScrambleText>
         <ul className="flex flex-wrap gap-x-8 gap-y-4">
           {SOCIALS.map((s) => (
             <li key={s.label} data-connect>

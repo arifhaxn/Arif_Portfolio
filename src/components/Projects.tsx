@@ -39,6 +39,7 @@ import {
 import { BG_SHAPE_OPACITY, DURATION, EASE } from "@/lib/motion";
 import { PROJECTS } from "@/lib/projects";
 import { ThumbnailCard } from "@/components/ThumbnailCard";
+import { ScrambleText } from "@/components/ScrambleText";
 
 const HeroHead = dynamic(
   () => import("@/components/HeroHead").then((m) => m.HeroHead),
@@ -52,7 +53,8 @@ function ProjectMeta({ index }: { index: number }) {
     <div className="flex flex-col gap-2 text-left">
       <p className="text-sm font-medium text-white">
         <span className="mr-2 font-mono text-zinc-500">{p.num}</span>
-        {p.name}
+        {/* Project card title — scrambles on scroll-into-view + hover. */}
+        <ScrambleText entrance="observer">{p.name}</ScrambleText>
       </p>
       <p className="text-sm text-zinc-400">{p.description}</p>
       <p className="text-xs uppercase tracking-[0.15em] text-zinc-500">
@@ -211,9 +213,13 @@ export function Projects() {
               className="flex min-h-[40vh] items-baseline gap-6 text-zinc-500 opacity-35"
             >
               <span className="font-mono text-sm">{p.num}</span>
-              <h3 className="text-5xl font-semibold tracking-tight xl:text-7xl">
+              <ScrambleText
+                as="h3"
+                entrance="observer"
+                className="text-5xl font-semibold tracking-tight xl:text-7xl"
+              >
                 {p.name}
-              </h3>
+              </ScrambleText>
             </div>
           ))}
         </div>

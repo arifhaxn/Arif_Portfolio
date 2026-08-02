@@ -15,7 +15,7 @@
 // -----------------------------------------------------------------------------
 
 import { gsap, ScrollTrigger, Observer } from "@/lib/gsap";
-import { ACHIEVE, DURATION, EASE, OPACITY, SCRUB, STAGGER, START } from "@/lib/motion";
+import { ACHIEVE, DURATION, EASE, OPACITY, SCRAMBLE, SCRUB, STAGGER, START } from "@/lib/motion";
 
 type Target = gsap.TweenTarget;
 type Vars = gsap.TweenVars;
@@ -26,6 +26,96 @@ export function prefersReducedMotion(): boolean {
     typeof window !== "undefined" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
+}
+
+// -----------------------------------------------------------------------------
+// Text scramble / decode
+// -----------------------------------------------------------------------------
+
+/**
+ * Scramble/decode one text element: each character cycles through random,
+ * case-matched glyphs and locks into place sweeping left→right with a slight
+ * per-character jitter, then settles on the original text. GSAP-driven (a tween
+ * on a progress value, so it runs on the shared ticker and is killable). Writes
+ * to `el.textContent` directly — the caller keeps the real text as the element's
+ * accessible name, and this element is the aria-hidden visible layer.
+ */
+export function scrambleText(el: HTMLElement, text: string): gsap.core.Tween {
+  if (prefersReducedMotion()) {
+    el.textContent = text;
+    return gsap.to({}, { duration: 0 });
+  }
+  const chars = text.split("");
+  const n = chars.length;
+  const isSpace = (c: string) => c === " " || c === " ";
+  // Per-character lock point: base position along the L→R sweep + random jitter.
+  const lockAt = chars.map((c, i) => {
+    if (isSpace(c)) return 0;
+    const base = (i / Math.max(n - 1, 1)) * SCRAMBLE.sweep;
+    return Math.min(1, base + Math.random() * SCRAMBLE.jitter);
+  });
+  const display = chars.slice();
+  const pickEvery = Math.max(1, Math.round(60 / SCRAMBLE.glyphFps));
+  let frame = 0;
+
+  const glyph = (c: string): string => {
+    if (/[A-Z]/.test(c)) return SCRAMBLE.upper[(Math.random() * 26) | 0];
+    if (/[a-z]/.test(c)) return SCRAMBLE.lower[(Math.random() * 26) | 0];
+    if (/[0-9]/.test(c)) return SCRAMBLE.digits[(Math.random() * 10) | 0];
+    return c; // punctuation / symbols pass through unscrambled
+  };
+
+  const state = { p: 0 };
+  const render = () => {
+    const repick = frame % pickEvery === 0;
+    frame++;
+    let out = "";
+    for (let i = 0; i < n; i++) {
+      const c = chars[i];
+      if (isSpace(c)) {
+        out += c;
+      } else if (state.p >= lockAt[i]) {
+        out += c; // locked → real character
+      } else {
+        if (repick) display[i] = glyph(c);
+        out += display[i];
+      }
+    }
+    el.textContent = out;
+  };
+
+  return gsap.to(state, {
+    p: 1,
+    duration: SCRAMBLE.duration,
+    ease: "none",
+    onUpdate: render,
+    onComplete: () => {
+      el.textContent = text;
+    },
+  });
+}
+
+/**
+ * Fire the entrance scramble on any ScrambleText instances at or within `el`.
+ * ScrambleText registers an idempotent `__scramblePlay` on its root node, so
+ * entrance helpers can call this for every element they stagger in — elements
+ * with no ScrambleText inside are simply skipped. Idempotent per element (the
+ * first call wins), so a helper trigger and an IntersectionObserver fallback
+ * can't double-fire.
+ */
+type ScrambleNode = Element & { __scramblePlay?: () => void };
+export function playScramble(el: Element): void {
+  const nodes: ScrambleNode[] = [];
+  if ((el as ScrambleNode).__scramblePlay) nodes.push(el as ScrambleNode);
+  el.querySelectorAll?.("[data-scramble]").forEach((n) => nodes.push(n as ScrambleNode));
+  nodes.forEach((n) => n.__scramblePlay?.());
+}
+
+/** Schedule per-element entrance scrambles matching a linear `each` stagger. */
+function scheduleScrambleStagger(els: HTMLElement[], each: number, baseDelay = 0) {
+  els.forEach((el, i) => {
+    gsap.delayedCall(baseDelay + i * each, () => playScramble(el));
+  });
 }
 
 // -----------------------------------------------------------------------------
@@ -58,8 +148,9 @@ export function bootPreloaderCells(targets: Target, vars: Vars = {}) {
  */
 export function navIntro(targets: Target, y = 20, vars: Vars = {}) {
   if (prefersReducedMotion()) return gsap.set(targets, { opacity: 1, y: 0 });
-  return gsap.fromTo(
-    targets,
+  const els = gsap.utils.toArray<HTMLElement>(targets);
+  const tween = gsap.fromTo(
+    els,
     { opacity: 0, y },
     {
       opacity: 1,
@@ -70,6 +161,9 @@ export function navIntro(targets: Target, y = 20, vars: Vars = {}) {
       ...vars,
     },
   );
+  // Ride each item's existing stagger slot: fire its scramble as its fade begins.
+  scheduleScrambleStagger(els, STAGGER.nav, (vars.delay as number) ?? 0);
+  return tween;
 }
 
 /**
@@ -78,8 +172,9 @@ export function navIntro(targets: Target, y = 20, vars: Vars = {}) {
  */
 export function heroTitleIn(targets: Target, vars: Vars = {}) {
   if (prefersReducedMotion()) return gsap.set(targets, { opacity: 1, y: 0 });
-  return gsap.fromTo(
-    targets,
+  const els = gsap.utils.toArray<HTMLElement>(targets);
+  const tween = gsap.fromTo(
+    els,
     { opacity: 0, y: 40 },
     {
       opacity: 1,
@@ -90,6 +185,8 @@ export function heroTitleIn(targets: Target, vars: Vars = {}) {
       ...vars,
     },
   );
+  scheduleScrambleStagger(els, STAGGER.heroTitle, (vars.delay as number) ?? 0);
+  return tween;
 }
 
 // -----------------------------------------------------------------------------
@@ -263,8 +360,9 @@ export function scrollReveal(
   start: string = START.overview,
 ) {
   if (prefersReducedMotion()) return gsap.set(targets, { opacity: 1, x: 0, y: 0 });
+  const els = gsap.utils.toArray<HTMLElement>(targets);
   return gsap.fromTo(
-    targets,
+    els,
     { opacity: 0, x: offset.x ?? 0, y: offset.y ?? 0 },
     {
       opacity: 1,
@@ -273,7 +371,14 @@ export function scrollReveal(
       duration: DURATION.reveal,
       ease: EASE.reveal,
       stagger: STAGGER.reveal,
-      scrollTrigger: { trigger: targets as gsap.DOMTarget, start, toggleActions: "play none none none" },
+      scrollTrigger: {
+        trigger: (els[0] ?? targets) as gsap.DOMTarget,
+        start,
+        toggleActions: "play none none none",
+        // When the reveal plays, ride each element's stagger slot with its
+        // scramble (non-ScrambleText elements are skipped).
+        onEnter: () => scheduleScrambleStagger(els, STAGGER.reveal),
+      },
     },
   );
 }
