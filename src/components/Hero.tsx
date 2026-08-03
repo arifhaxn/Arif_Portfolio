@@ -49,8 +49,10 @@ export function Hero() {
         aria-hidden
         className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center"
       >
-        <div className="relative aspect-square w-[105vmin]">
-          <HeroHead shape="robot" zoom={1.4} />
+        <div className="relative aspect-square w-[100vmin]">
+          {/* zoom kept modest so the WHOLE robot stays in frame (the model is
+              normalized by its bounding sphere, so it only fills ~68% at zoom 1). */}
+          <HeroHead shape="robot" zoom={1.1} />
         </div>
       </div>
 
