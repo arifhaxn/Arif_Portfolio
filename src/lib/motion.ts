@@ -90,6 +90,18 @@ export const ACHIEVE = {
 } as const;
 
 /**
+ * HeroHead style shift (see `styleShift`). Periodically cross-fades the shared
+ * 3D head between its two render styles — wireframe (A) and halftone dot-matrix
+ * (B) — on a long hold cycle, separate from the shorter idle pose cross-fade.
+ * The crossfade isn't smooth: a few `beat`-length glitch flickers are layered in
+ * (steps-eased hops) echoing the site's decode/scramble character.
+ */
+export const STYLE_SHIFT = {
+  hold: 8, // seconds holding each style before swapping
+  beat: 0.1, // per glitch-beat duration (a handful ≈ ~0.5s transition window)
+} as const;
+
+/**
  * Text-scramble / decode effect (see ScrambleText + `scrambleText`). Characters
  * cycle through random glyphs and lock in left-to-right. `duration` is the reveal
  * speed per element; `sweep` is the fraction of the timeline the L→R lock points

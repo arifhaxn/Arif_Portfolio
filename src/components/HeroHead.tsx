@@ -43,11 +43,52 @@ import {
   MathUtils,
   Mesh,
   NormalBlending,
+  Vector3,
   type Group,
   type LineBasicMaterial,
   type MeshBasicMaterial,
+  type ShaderMaterial,
 } from "three";
-import { headPointerTilt, idlePoseSwap, prefersReducedMotion } from "@/lib/animations";
+import {
+  headPointerTilt,
+  idlePoseSwap,
+  prefersReducedMotion,
+  styleShift,
+} from "@/lib/animations";
+
+// -----------------------------------------------------------------------------
+// Halftone (Style B) shader — screen-space dot-matrix over the lit solid mesh.
+// A fixed view-space light gives each facet a luminance; the dot's radius grows
+// with that luminance (bright/top → big dense dots, shadow → thin to nothing),
+// aligned to a screen-pixel grid so it reads like newspaper halftone. White dots
+// on transparent; `uOpacity` is driven by the style crossfade.
+// -----------------------------------------------------------------------------
+const HALFTONE_VERTEX = /* glsl */ `
+  varying vec3 vViewNormal;
+  void main() {
+    vViewNormal = normalize(normalMatrix * normal);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+const HALFTONE_FRAGMENT = /* glsl */ `
+  uniform float uOpacity;
+  uniform float uDotSize;
+  uniform vec3 uLightDir;
+  varying vec3 vViewNormal;
+  void main() {
+    if (uOpacity <= 0.001) discard;
+    float ndl = dot(normalize(vViewNormal), normalize(uLightDir));
+    float lum = clamp(ndl * 0.5 + 0.55, 0.0, 1.0);
+    lum = pow(lum, 1.5); // contrast: shadows thin out toward nothing
+    vec2 cell = mod(gl_FragCoord.xy, uDotSize) / uDotSize - 0.5;
+    float dist = length(cell) * 2.0;
+    float radius = sqrt(lum) * 1.1; // area ~ luminance
+    float coverage = 1.0 - smoothstep(radius - 0.12, radius + 0.12, dist);
+    float a = coverage * uOpacity;
+    if (a < 0.01) discard;
+    gl_FragColor = vec4(vec3(1.0), a);
+  }
+`;
 
 export type HeadShape = "icosahedron" | "robot";
 
@@ -151,6 +192,7 @@ type Style = {
  */
 function ShapeMeshes({
   geometry,
+  solidGeometry,
   scale = 1,
   poseA = POLY_POSE_A,
   poseB = POLY_POSE_B,
@@ -159,7 +201,10 @@ function ShapeMeshes({
   spin = 0,
   zoom = 1,
 }: {
+  /** Style A geometry — line set (robot) or wireframe mesh (icosahedron). */
   geometry: BufferGeometry;
+  /** Style B geometry — the SOLID, flat-normal mesh for the halftone pass. */
+  solidGeometry: BufferGeometry;
   scale?: number;
   poseA?: Euler3;
   poseB?: Euler3;
@@ -178,24 +223,48 @@ function ShapeMeshes({
   const spinAngle = useRef(0);
   const reduce = useMemo(() => prefersReducedMotion(), []);
 
-  // Pose cross-fade — exact idle-swap timing, retargeted at materials. (GSAP
-  // only touches `.opacity`, shared by both material types.)
+  // Pose cross-fade drives these plain values (not the materials directly), so
+  // the separate STYLE cross-fade can multiply on top without a GSAP conflict.
+  const poseOpA = useRef({ opacity: 1 });
+  const poseOpB = useRef({ opacity: 0 });
+  // Style mix: 0 = wireframe (A), 1 = halftone (B). Driven by styleShift.
+  const styleMix = useRef({ v: 0 });
+
+  // Halftone material ref (mutated each frame for the crossfade) + its stable
+  // uniforms object for the JSX.
+  const halftoneMat = useRef<ShaderMaterial>(null);
+  const halftoneUniforms = useMemo(
+    () => ({
+      uOpacity: { value: 0 },
+      uDotSize: { value: 8 }, // device px per dot cell
+      uLightDir: { value: new Vector3(0.25, 0.7, 0.85) }, // view-space, upper-front
+    }),
+    [],
+  );
+
+  // Pose cross-fade (short cycle) + style shift (long cycle) run alongside.
   useEffect(() => {
-    if (!matA.current || !matB.current) return;
-    const tl = idlePoseSwap(matA.current, matB.current);
+    const poseTl = idlePoseSwap(poseOpA.current, poseOpB.current);
+    const styleTl = styleShift(styleMix.current);
     return () => {
-      tl.kill();
+      poseTl.kill();
+      styleTl.kill();
     };
   }, []);
 
-  // Each frame: slow auto-spin about Y accumulates, and the smoothed mouse
-  // look-at angle (degrees → radians) is added ON TOP, so pointer tracking is
-  // unchanged — the shape just also drifts around continuously.
+  // Each frame: slow auto-spin + mouse look-at on the group, and the combined
+  // pose × style opacity on Style A materials / the halftone opacity on Style B.
   useFrame((_, delta) => {
     if (!group.current) return;
     if (!reduce) spinAngle.current += spin * delta;
     group.current.rotation.x = MathUtils.degToRad(tilt.current.x);
     group.current.rotation.y = MathUtils.degToRad(tilt.current.y) + spinAngle.current;
+
+    const mix = styleMix.current.v;
+    const invMix = 1 - mix;
+    if (matA.current) matA.current.opacity = poseOpA.current.opacity * invMix;
+    if (matB.current) matB.current.opacity = poseOpB.current.opacity * invMix;
+    if (halftoneMat.current) halftoneMat.current.uniforms.uOpacity.value = mix;
   });
 
   const blending = style.additive ? AdditiveBlending : NormalBlending;
@@ -203,6 +272,19 @@ function ShapeMeshes({
   return (
     <group ref={group}>
       <Center scale={scale * zoom}>
+        {/* --- Style B: halftone dot-matrix over the solid mesh --- */}
+        <mesh geometry={solidGeometry} rotation={poseA}>
+          <shaderMaterial
+            ref={halftoneMat}
+            transparent
+            depthWrite={false}
+            uniforms={halftoneUniforms}
+            vertexShader={HALFTONE_VERTEX}
+            fragmentShader={HALFTONE_FRAGMENT}
+          />
+        </mesh>
+
+        {/* --- Style A: the existing wireframe / crease-line treatment --- */}
         {style.renderAs === "lines" ? (
           <>
             <lineSegments geometry={geometry} rotation={poseA}>
@@ -268,8 +350,28 @@ function PolyShape({
   zoom?: number;
 }) {
   const geometry = useMemo(() => new IcosahedronGeometry(FIT_RADIUS, 0), []);
-  useEffect(() => () => geometry.dispose(), [geometry]);
-  return <ShapeMeshes geometry={geometry} tilt={tilt} spin={spin} zoom={zoom} />;
+  // Solid, flat-normal copy for the halftone (Style B).
+  const solidGeometry = useMemo(() => {
+    const g = geometry.toNonIndexed();
+    g.computeVertexNormals();
+    return g;
+  }, [geometry]);
+  useEffect(
+    () => () => {
+      geometry.dispose();
+      solidGeometry.dispose();
+    },
+    [geometry, solidGeometry],
+  );
+  return (
+    <ShapeMeshes
+      geometry={geometry}
+      solidGeometry={solidGeometry}
+      tilt={tilt}
+      spin={spin}
+      zoom={zoom}
+    />
+  );
 }
 
 /**
@@ -290,12 +392,14 @@ function RobotShape({
 }) {
   const { scene } = useGLTF("/robot.glb");
 
-  const { geometry, scale } = useMemo(() => {
+  const { geometry, solidGeometry, scale } = useMemo(() => {
     let srcMesh: Mesh | null = null;
     scene.traverse((o) => {
       if (!srcMesh && o instanceof Mesh) srcMesh = o;
     });
-    if (!srcMesh) return { geometry: new BufferGeometry(), scale: 1 };
+    if (!srcMesh) {
+      return { geometry: new BufferGeometry(), solidGeometry: new BufferGeometry(), scale: 1 };
+    }
     const found = srcMesh as Mesh;
     const src = found.geometry as BufferGeometry;
 
@@ -307,24 +411,32 @@ function RobotShape({
     found.updateWorldMatrix(true, false);
     base.applyMatrix4(found.matrixWorld);
 
-    // Crease-edge extraction, then the triangle base is no longer needed.
+    // Style A: crease-edge extraction from the indexed base.
     const edges = new EdgesGeometry(base, ROBOT_EDGE_ANGLE_DEG);
-    base.dispose();
-
-    // Remove just the back-facing eye-socket duplicates (localized; everything
-    // else stays see-through). Dispose the pre-filter copy.
-    const geometry = stripEyeBackDuplicates(edges);
+    const geometry = stripEyeBackDuplicates(edges); // + eye-dup removal
     edges.dispose();
+
+    // Style B: the solid mesh with flat (per-face) normals for the halftone.
+    const solidGeometry = base.toNonIndexed();
+    solidGeometry.computeVertexNormals();
+    base.dispose();
 
     geometry.computeBoundingSphere();
     const r = geometry.boundingSphere?.radius ?? 1;
-    return { geometry, scale: FIT_RADIUS / r };
+    return { geometry, solidGeometry, scale: FIT_RADIUS / r };
   }, [scene]);
 
-  useEffect(() => () => geometry.dispose(), [geometry]);
+  useEffect(
+    () => () => {
+      geometry.dispose();
+      solidGeometry.dispose();
+    },
+    [geometry, solidGeometry],
+  );
   return (
     <ShapeMeshes
       geometry={geometry}
+      solidGeometry={solidGeometry}
       scale={scale}
       poseA={ROBOT_POSE_A}
       poseB={ROBOT_POSE_B}

@@ -25,6 +25,7 @@ import {
   SCRUB,
   STAGGER,
   START,
+  STYLE_SHIFT,
 } from "@/lib/motion";
 
 type Target = gsap.TweenTarget;
@@ -255,6 +256,35 @@ export function heroTitleIn(targets: Target, vars: Vars = {}) {
 // -----------------------------------------------------------------------------
 // Loops (idle / ambient)
 // -----------------------------------------------------------------------------
+
+/**
+ * HeroHead style shift — drives a `{ v }` mix value 0↔1 on a long hold cycle to
+ * cross-fade the head between its two render styles (0 = wireframe A, 1 = halftone
+ * B). The transition isn't a smooth ramp: a few steps-eased glitch beats hop the
+ * value around before it settles, echoing the scramble/decode character. Runs
+ * ALONGSIDE `idlePoseSwap` (separate, longer cycle). Reduced motion: no swap —
+ * the value stays 0 so style A is held static. Returns the repeating timeline.
+ */
+export function styleShift(target: { v: number }) {
+  if (prefersReducedMotion()) return gsap.timeline();
+  const tl = gsap.timeline({ repeat: -1 });
+  // Glitchy hop sequences (last beat settles smoothly on the target style).
+  const toB = [0.55, 0.2, 0.8, 0.4, 1];
+  const toA = [0.45, 0.8, 0.15, 0.6, 0];
+  const glitch = (seq: number[]) =>
+    seq.forEach((v, i) =>
+      tl.to(target, {
+        v,
+        duration: STYLE_SHIFT.beat,
+        ease: i === seq.length - 1 ? "power2.out" : "steps(1)",
+      }),
+    );
+  glitch(toB);
+  tl.to(target, { v: 1, duration: STYLE_SHIFT.hold }); // hold style B
+  glitch(toA);
+  tl.to(target, { v: 0, duration: STYLE_SHIFT.hold }); // hold style A
+  return tl;
+}
 
 /**
  * Hero head idle pose swap — crossfades between two stacked layers on a hold →
