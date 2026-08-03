@@ -41,6 +41,9 @@ const useIsoLayoutEffect =
 // Stable server/first-client dims so hydration matches; recomputed on mount.
 const DEFAULT_DIMS = { cols: 22, rows: 13 };
 
+// Routes that opt OUT of the pixel reveal (no cover, no dissolve).
+const EXCLUDED = new Set(["/", "/about"]);
+
 function computeDims() {
   if (typeof window === "undefined") return DEFAULT_DIMS;
   const vw = window.innerWidth;
@@ -76,6 +79,13 @@ export function PixelReveal() {
   // Cover + dissolve on first mount and on every pathname change.
   useIsoLayoutEffect(() => {
     if (prefersReducedMotion()) return;
+    // Excluded routes (/, /about): no reveal. The `hidden` class below keeps the
+    // overlay out of the DOM flow; mark first-load consumed so a later navigation
+    // to an included route still plays as a route change.
+    if (EXCLUDED.has(pathname)) {
+      firstRef.current = false;
+      return;
+    }
     const el = overlay.current;
     if (!el) return;
     const cells = el.querySelectorAll("[data-pixel-cell]");
@@ -111,7 +121,11 @@ export function PixelReveal() {
     <div
       ref={overlay}
       aria-hidden
-      className="fixed inset-0 z-[100] grid motion-reduce:hidden"
+      // Excluded routes hide the whole overlay (display:none) — computed at
+      // render so there's no cover flash on first paint of / or /about.
+      className={`fixed inset-0 z-[100] grid motion-reduce:hidden ${
+        EXCLUDED.has(pathname) ? "hidden" : ""
+      }`}
       style={{
         gridTemplateColumns: `repeat(${dims.cols}, 1fr)`,
         gridTemplateRows: `repeat(${dims.rows}, 1fr)`,
