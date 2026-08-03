@@ -90,13 +90,16 @@ const HALFTONE_FRAGMENT = /* glsl */ `
     vec3 H = normalize(L + V);
     float diff = clamp(dot(N, L), 0.0, 1.0);
     float spec = pow(clamp(dot(N, H), 0.0, 1.0), 22.0); // tight highlight sweep
-    float lum = diff * 0.9 + spec * 0.7 + 0.04;         // + faint ambient floor
-    // Strong tonal remap: darks fall to nothing, highlights go fully dense.
-    lum = smoothstep(0.06, 0.92, lum);
+    float lum = diff * 0.95 + spec * 0.75;              // NO ambient — backs stay dark
+    // Strong tonal remap, then a STEEP luminance→dot-size curve (lum^2): mid/low
+    // luminance falls off fast toward dot size 0, so only genuinely lit surfaces
+    // (highlights, the front sweep) show dots; shadow/back regions go sparse/black.
+    lum = smoothstep(0.08, 0.9, lum);
+    float radius = pow(lum, 2.0) * 1.4; // highlights → full, shadows → ~0
     vec2 cell = mod(gl_FragCoord.xy, uDotSize) / uDotSize - 0.5;
     float dist = length(cell) * 2.0;
-    float radius = sqrt(lum) * 1.15; // dot area ~ luminance
-    float coverage = 1.0 - smoothstep(radius - 0.1, radius + 0.1, dist);
+    float coverage = 1.0 - smoothstep(radius - 0.08, radius + 0.08, dist);
+    coverage *= smoothstep(0.03, 0.12, radius); // kill sub-threshold dots entirely
     float a = coverage * uOpacity;
     if (a < 0.01) discard;
     gl_FragColor = vec4(vec3(1.0), a);
