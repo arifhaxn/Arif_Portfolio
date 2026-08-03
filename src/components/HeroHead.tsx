@@ -43,10 +43,13 @@ import {
   MathUtils,
   Mesh,
   NormalBlending,
+  Color,
+  Vector2,
   Vector3,
   type Group,
   type LineBasicMaterial,
   type MeshBasicMaterial,
+  type Points,
   type ShaderMaterial,
 } from "three";
 import {
@@ -103,6 +106,72 @@ const HALFTONE_FRAGMENT = /* glsl */ `
     float a = coverage * uOpacity;
     if (a < 0.01) discard;
     gl_FragColor = vec4(vec3(1.0), a);
+  }
+`;
+
+// -----------------------------------------------------------------------------
+// Background star-particle field (paired with Style B). A grid of small square
+// GL points in loose wave-like rows behind the model. The ambient wave undulates
+// them; the pointer (from the same eased tilt signal — zero on touch/reduced, so
+// parallax is auto-off there) shifts them for depth. Opacity is driven by the
+// style mix, so the field fades in/out with the halftone. Constant screen-size
+// squares = pixelated look.
+// -----------------------------------------------------------------------------
+const PARTICLE_COLS = 30;
+const PARTICLE_ROWS = 17;
+const PARTICLE_W = 9; // world-unit spread (overfills the framed background)
+const PARTICLE_H = 5.5;
+
+/** Grid of background points with per-point seed + parallax-depth attributes. */
+function buildParticleGeometry(): BufferGeometry {
+  const pos: number[] = [];
+  const seed: number[] = [];
+  const depth: number[] = [];
+  for (let r = 0; r < PARTICLE_ROWS; r++) {
+    for (let c = 0; c < PARTICLE_COLS; c++) {
+      pos.push(
+        (c / (PARTICLE_COLS - 1) - 0.5) * PARTICLE_W + (Math.random() - 0.5) * 0.18,
+        (r / (PARTICLE_ROWS - 1) - 0.5) * PARTICLE_H + (Math.random() - 0.5) * 0.14,
+        -2.2 - Math.random() * 1.6, // depth behind the model (~z 0)
+      );
+      seed.push(Math.random());
+      depth.push(Math.random()); // 0..1 parallax + size factor
+    }
+  }
+  const g = new BufferGeometry();
+  g.setAttribute("position", new BufferAttribute(new Float32Array(pos), 3));
+  g.setAttribute("aSeed", new BufferAttribute(new Float32Array(seed), 1));
+  g.setAttribute("aDepth", new BufferAttribute(new Float32Array(depth), 1));
+  return g;
+}
+
+const PARTICLE_VERTEX = /* glsl */ `
+  uniform float uTime;
+  uniform vec2 uPointer;   // normalized (-1..1), 0 on touch/reduced
+  attribute float aSeed;
+  attribute float aDepth;
+  varying float vSeed;
+  void main() {
+    vSeed = aSeed;
+    vec3 p = position;
+    // slow ambient wave in loose rows
+    p.y += sin(p.x * 0.6 + uTime * 0.55 + aSeed * 6.2831) * 0.13;
+    p.x += cos(p.y * 0.5 + uTime * 0.4 + aSeed * 6.2831) * 0.07;
+    // pointer parallax — shift opposite the cursor, more for "closer" points
+    float par = mix(0.06, 0.28, aDepth);
+    p.xy += -uPointer * par;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+    gl_PointSize = 3.0 + aDepth * 4.0; // constant screen size → pixelated squares
+  }
+`;
+const PARTICLE_FRAGMENT = /* glsl */ `
+  uniform float uOpacity;
+  uniform vec3 uColor;
+  varying float vSeed;
+  void main() {
+    if (uOpacity <= 0.001) discard;
+    float b = 0.55 + vSeed * 0.45;                 // per-particle brightness
+    gl_FragColor = vec4(uColor * b, uOpacity * (0.35 + vSeed * 0.55));
   }
 `;
 
@@ -201,6 +270,62 @@ type Style = {
 };
 
 /**
+ * Background particle field — rendered behind the model, faded by the style mix
+ * (visible during Style B). `styleMix` and `pointer` (the eased tilt signal) are
+ * shared refs from ShapeMeshes; `reduce` freezes all motion. Renders first
+ * (renderOrder) with no depth test so it always sits behind the head.
+ */
+function ParticleField({
+  styleMix,
+  pointer,
+  reduce,
+}: {
+  styleMix: React.RefObject<{ v: number }>;
+  pointer: React.RefObject<{ x: number; y: number }>;
+  reduce: boolean;
+}) {
+  const matRef = useRef<ShaderMaterial>(null);
+  const pointsRef = useRef<Points>(null);
+  const geometry = useMemo(() => buildParticleGeometry(), []);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  const uniforms = useMemo(
+    () => ({
+      uTime: { value: 0 },
+      uOpacity: { value: 0 },
+      uPointer: { value: new Vector2(0, 0) },
+      uColor: { value: new Color(0.42, 0.5, 0.72) }, // dim slate-blue
+    }),
+    [],
+  );
+
+  useFrame((_, delta) => {
+    const m = matRef.current;
+    if (!m) return;
+    m.uniforms.uOpacity.value = styleMix.current.v; // fade with Style B
+    if (!reduce) {
+      m.uniforms.uTime.value += delta;
+      // tilt is eased look-at in degrees (±~12); normalize to ±1 for parallax.
+      m.uniforms.uPointer.value.set(pointer.current.y / 12, -pointer.current.x / 12);
+    }
+  });
+
+  return (
+    <points ref={pointsRef} geometry={geometry} renderOrder={-10}>
+      <shaderMaterial
+        ref={matRef}
+        transparent
+        depthWrite={false}
+        depthTest={false}
+        uniforms={uniforms}
+        vertexShader={PARTICLE_VERTEX}
+        fragmentShader={PARTICLE_FRAGMENT}
+      />
+    </points>
+  );
+}
+
+/**
  * Shared inner renderer: tilt group + the two crossfading pose copies. Shapes
  * supply geometry and a style; "wireframe" draws every triangle edge (right for
  * the low-poly icosahedron), "lines" draws a prebuilt line geometry such as
@@ -286,7 +411,11 @@ function ShapeMeshes({
   const blending = style.additive ? AdditiveBlending : NormalBlending;
 
   return (
-    <group ref={group}>
+    <>
+      {/* Background particle field (behind the head), faded with the style mix. */}
+      <ParticleField styleMix={styleMix} pointer={tilt} reduce={reduce} />
+
+      <group ref={group}>
       <Center scale={scale * zoom}>
         {/* --- Style B: halftone dot-matrix over the solid mesh --- */}
         <mesh geometry={solidGeometry} rotation={poseA}>
@@ -351,11 +480,12 @@ function ShapeMeshes({
           </>
         )}
       </Center>
-    </group>
+      </group>
+    </>
   );
 }
 
-/** Default lightweight shape — 20-face icosahedron (the confirmed baseline). */
+/** Default lightweight shape — 20-face icosahedron (the confirmed baseline).  */
 function PolyShape({
   tilt,
   spin = 0,
