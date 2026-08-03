@@ -201,11 +201,12 @@ export function Projects() {
       {/* ================= Desktop: marquee + pinned visual column ========== */}
       <div className="relative z-10 hidden lg:grid lg:grid-cols-[1.2fr_1fr]">
         {/* Left: tall stack of marquee rows. Row height (40vh each) sets the
-            section height and therefore the pin distance. The bottom padding is
-            tail scroll room: without it the section ends while the LAST row is
-            still in the lower viewport, so it can never reach the center active
-            zone — its card (06) would never swap in nor fully brighten. */}
-        <div className="pb-[45vh]">
+            section height and therefore the pin distance. pt-[30vh] head room
+            centers the FIRST row in the viewport at scroll-top, so LeadUnity is
+            the active/open card on load (without it, row 0 sits high and OnePick
+            lands in the center band instead). pb-[45vh] is matching tail room so
+            the LAST row can also reach the center active zone. */}
+        <div className="pb-[45vh] pt-[30vh]">
           {PROJECTS.map((p) => (
             <div
               key={p.num}
