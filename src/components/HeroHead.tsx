@@ -43,7 +43,6 @@ import {
   MathUtils,
   Mesh,
   NormalBlending,
-  Color,
   Vector2,
   Vector3,
   type Group,
@@ -147,7 +146,8 @@ function buildParticleGeometry(): BufferGeometry {
 
 const PARTICLE_VERTEX = /* glsl */ `
   uniform float uTime;
-  uniform vec2 uPointer;   // normalized (-1..1), 0 on touch/reduced
+  uniform vec2 uCursor;    // cursor mapped to world XY on the plane (far off when idle)
+  uniform float uRepel;    // repulsion strength (world units)
   attribute float aSeed;
   attribute float aDepth;
   varying float vSeed;
@@ -157,21 +157,24 @@ const PARTICLE_VERTEX = /* glsl */ `
     // slow ambient wave in loose rows
     p.y += sin(p.x * 0.6 + uTime * 0.55 + aSeed * 6.2831) * 0.13;
     p.x += cos(p.y * 0.5 + uTime * 0.4 + aSeed * 6.2831) * 0.07;
-    // pointer parallax — shift opposite the cursor, more for "closer" points
-    float par = mix(0.06, 0.28, aDepth);
-    p.xy += -uPointer * par;
+    // cursor repulsion — push away from the pointer with a local falloff, so it
+    // reads as the cursor repelling the particles.
+    vec2 away = p.xy - uCursor;
+    float d = length(away);
+    float f = max(0.0, 1.0 - d / 1.8);
+    f = f * f;
+    p.xy += normalize(away + 1e-3) * f * uRepel * (0.6 + aDepth * 0.4);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-    gl_PointSize = 3.0 + aDepth * 4.0; // constant screen size → pixelated squares
+    gl_PointSize = 4.0 + aDepth * 6.0; // chunkier → more pixelated squares
   }
 `;
 const PARTICLE_FRAGMENT = /* glsl */ `
   uniform float uOpacity;
-  uniform vec3 uColor;
   varying float vSeed;
   void main() {
     if (uOpacity <= 0.001) discard;
-    float b = 0.55 + vSeed * 0.45;                 // per-particle brightness
-    gl_FragColor = vec4(uColor * b, uOpacity * (0.35 + vSeed * 0.55));
+    float b = 0.6 + vSeed * 0.4;                          // grayscale, black & white
+    gl_FragColor = vec4(vec3(b), uOpacity * (0.14 + vSeed * 0.26)); // subtle
   }
 `;
 
@@ -271,17 +274,18 @@ type Style = {
 
 /**
  * Background particle field — rendered behind the model, faded by the style mix
- * (visible during Style B). `styleMix` and `pointer` (the eased tilt signal) are
- * shared refs from ShapeMeshes; `reduce` freezes all motion. Renders first
+ * (visible during Style B). `styleMix` is a shared ref; `reduce` freezes motion.
+ * The cursor (tracked on window + mapped through the canvas rect so it works even
+ * when the canvas is pointer-events-none) REPELS particles locally. Renders first
  * (renderOrder) with no depth test so it always sits behind the head.
  */
+const CURSOR_IDLE = 1e4; // parked far off-screen so nothing is repelled when idle
+
 function ParticleField({
   styleMix,
-  pointer,
   reduce,
 }: {
   styleMix: React.RefObject<{ v: number }>;
-  pointer: React.RefObject<{ x: number; y: number }>;
   reduce: boolean;
 }) {
   const matRef = useRef<ShaderMaterial>(null);
@@ -293,20 +297,42 @@ function ParticleField({
     () => ({
       uTime: { value: 0 },
       uOpacity: { value: 0 },
-      uPointer: { value: new Vector2(0, 0) },
-      uColor: { value: new Color(0.42, 0.5, 0.72) }, // dim slate-blue
+      uCursor: { value: new Vector2(CURSOR_IDLE, CURSOR_IDLE) },
+      uRepel: { value: 0.95 },
     }),
     [],
   );
 
-  useFrame((_, delta) => {
+  // Raw window cursor (pixels). A window listener works regardless of the canvas'
+  // pointer-events; on touch there's no persistent pointer, so it stays parked.
+  const cursorPx = useRef({ x: CURSOR_IDLE, y: CURSOR_IDLE });
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      cursorPx.current.x = e.clientX;
+      cursorPx.current.y = e.clientY;
+    };
+    window.addEventListener("pointermove", onMove);
+    return () => window.removeEventListener("pointermove", onMove);
+  }, []);
+
+  useFrame((state, delta) => {
     const m = matRef.current;
     if (!m) return;
     m.uniforms.uOpacity.value = styleMix.current.v; // fade with Style B
-    if (!reduce) {
-      m.uniforms.uTime.value += delta;
-      // tilt is eased look-at in degrees (±~12); normalize to ±1 for parallax.
-      m.uniforms.uPointer.value.set(pointer.current.y / 12, -pointer.current.x / 12);
+    if (reduce) return;
+    m.uniforms.uTime.value += delta;
+    // Map the window cursor to world XY on the particle plane (~z -3).
+    const rect = state.gl.domElement.getBoundingClientRect();
+    if (rect.width && cursorPx.current.x < CURSOR_IDLE) {
+      const nx = ((cursorPx.current.x - rect.left) / rect.width) * 2 - 1;
+      const ny = -(((cursorPx.current.y - rect.top) / rect.height) * 2 - 1);
+      const depthFactor = (2.9 + 3.0) / 2.9; // plane distance / z=0 distance
+      m.uniforms.uCursor.value.set(
+        nx * state.viewport.width * 0.5 * depthFactor,
+        ny * state.viewport.height * 0.5 * depthFactor,
+      );
+    } else {
+      m.uniforms.uCursor.value.set(CURSOR_IDLE, CURSOR_IDLE);
     }
   });
 
@@ -413,7 +439,7 @@ function ShapeMeshes({
   return (
     <>
       {/* Background particle field (behind the head), faded with the style mix. */}
-      <ParticleField styleMix={styleMix} pointer={tilt} reduce={reduce} />
+      <ParticleField styleMix={styleMix} reduce={reduce} />
 
       <group ref={group}>
       <Center scale={scale * zoom}>
