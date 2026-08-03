@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SmoothScrollProvider } from "@/components/providers/SmoothScrollProvider";
 import { Navbar } from "@/components/Navbar";
+import { PixelReveal } from "@/components/PixelReveal";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -42,6 +43,9 @@ export default function RootLayout({
           <Navbar />
           {children}
         </SmoothScrollProvider>
+        {/* Pixel-reveal cover — one instance, persists across route changes and
+            plays over everything (highest z-index). */}
+        <PixelReveal />
       </body>
     </html>
   );

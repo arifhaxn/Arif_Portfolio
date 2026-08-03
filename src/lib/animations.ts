@@ -15,7 +15,17 @@
 // -----------------------------------------------------------------------------
 
 import { gsap, ScrollTrigger, Observer } from "@/lib/gsap";
-import { ACHIEVE, DURATION, EASE, OPACITY, SCRAMBLE, SCRUB, STAGGER, START } from "@/lib/motion";
+import {
+  ACHIEVE,
+  DURATION,
+  EASE,
+  OPACITY,
+  PIXEL_REVEAL,
+  SCRAMBLE,
+  SCRUB,
+  STAGGER,
+  START,
+} from "@/lib/motion";
 
 type Target = gsap.TweenTarget;
 type Vars = gsap.TweenVars;
@@ -116,6 +126,40 @@ function scheduleScrambleStagger(els: HTMLElement[], each: number, baseDelay = 0
   els.forEach((el, i) => {
     gsap.delayedCall(baseDelay + i * each, () => playScramble(el));
   });
+}
+
+// -----------------------------------------------------------------------------
+// Pixel-reveal transition (page load + route changes)
+// -----------------------------------------------------------------------------
+
+/**
+ * Dissolve the cover grid: each cell fades opacity→0 while scaling down, the
+ * per-cell delay = its row (top→bottom sweep) + a small random jitter. `cols` is
+ * needed to derive each cell's row from its flat index. Transform (scale) +
+ * opacity only, so it stays GPU-composited. Reduced motion: hide instantly.
+ */
+export function pixelRevealOut(cells: Target, cols: number, onComplete?: () => void) {
+  const arr = gsap.utils.toArray<HTMLElement>(cells);
+  if (prefersReducedMotion()) {
+    gsap.set(arr, { opacity: 0 });
+    onComplete?.();
+    return gsap.timeline();
+  }
+  return gsap.to(arr, {
+    opacity: 0,
+    scale: PIXEL_REVEAL.cellScale,
+    duration: PIXEL_REVEAL.cellDuration,
+    ease: PIXEL_REVEAL.ease,
+    transformOrigin: "center center",
+    stagger: (i) =>
+      Math.floor(i / cols) * PIXEL_REVEAL.rowStagger + Math.random() * PIXEL_REVEAL.jitter,
+    onComplete,
+  });
+}
+
+/** Snap every cover cell back to fully covering (opaque, full size), no tween. */
+export function pixelRevealCoverInstant(cells: Target) {
+  gsap.set(cells, { opacity: 1, scale: 1 });
 }
 
 // -----------------------------------------------------------------------------

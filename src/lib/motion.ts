@@ -99,6 +99,28 @@ export const ACHIEVE = {
  * uppercase originals scramble through `upper`, lowercase through `lower`, digits
  * through `digits`; punctuation/other characters are left as-is (spaces too).
  */
+/**
+ * Pixel-reveal transition (see PixelReveal + `pixelRevealOut`). A full-screen
+ * grid of solid cells covers the page and dissolves top-to-bottom: cells fade
+ * opacity to 0 while scaling down, staggered per row with a small random jitter
+ * so the sweep line reads organic rather than a straight bar. `targetCell` sizes
+ * the grid (cols/rows derived per viewport to keep cells ~square); `initialDelay`
+ * / `swapDelay` are the waits before dissolving on first load / after a route
+ * commit (so the new content is mounted underneath first).
+ */
+export const PIXEL_REVEAL = {
+  targetCell: 58, // px — target cell size; cols/rows derived from the viewport
+  maxCols: 24, // clamp so big screens don't explode the cell count
+  minCols: 8,
+  rowStagger: 0.04, // per-row base delay of the top→bottom sweep
+  jitter: 0.05, // random per-cell start jitter (s)
+  cellDuration: 0.4, // per-cell fade + scale-down
+  cellScale: 0.35, // scale-down target (part of the "dissolve" read)
+  ease: "power2.in",
+  initialDelay: 0.15, // wait after first mount before dissolving
+  swapDelay: 0.08, // wait after a route commit before dissolving
+} as const;
+
 export const SCRAMBLE = {
   duration: 0.6, // total scramble time per element
   sweep: 0.65, // fraction of the timeline the L→R lock sweep spans (0..1)
