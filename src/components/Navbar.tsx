@@ -25,7 +25,7 @@ import { ScrambleText } from "@/components/ScrambleText";
 // anchor (Next.js handles both in one client transition). "Achievements" is now
 // its own real route.
 const LINKS = [
-  { label: "Projects", href: "/#projects" },
+  { label: "Projects", href: "/projects" },
   { label: "About", href: "/about" },
   { label: "Achievements", href: "/achievements" },
   { label: "Contact", href: "/about#contact" },

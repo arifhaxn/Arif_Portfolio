@@ -235,15 +235,18 @@ export function Projects() {
             className="flex h-screen flex-col items-center justify-center gap-10"
           >
             {/* Card stack: one absolutely-positioned card per project; only the
-                active one is visible. thumbRailSwap crossfades between them. */}
-            <div className="relative h-80 w-full max-w-sm">
+                active one is visible. thumbRailSwap crossfades between them.
+                justify-center keeps every card's content vertically centered in
+                the box (which is itself centered in the column), so cards with
+                different content heights don't sit off-center. */}
+            <div className="relative h-96 w-full max-w-sm">
               {PROJECTS.map((p, i) => (
                 <div
                   key={p.num}
                   ref={(el) => {
                     cardRefs.current[i] = el;
                   }}
-                  className="absolute inset-0 flex flex-col gap-4"
+                  className="absolute inset-0 flex flex-col justify-center gap-4"
                   style={{
                     opacity: i === 0 ? 1 : 0,
                     pointerEvents: i === 0 ? "auto" : "none",
