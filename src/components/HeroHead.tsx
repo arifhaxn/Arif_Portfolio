@@ -99,13 +99,15 @@ function stripEyeBackDuplicates(edges: BufferGeometry): BufferGeometry {
   return out;
 }
 
-// Resting orientations the pose cross-fade transitions between (radians).
-// The polyhedron gets a tilted 3/4 facet view; a humanoid must stand UPRIGHT
-// (X/Z tilt reads as leaning), so the robot only ever rotates about Y.
+// Resting orientations for the two crossfading copies (radians). Pose B is kept
+// IDENTICAL to Pose A on purpose: the idle crossfade should only shift the COLOR
+// in place, never move/rotate the shape — different poses made it visibly drift
+// as the colors swapped. (The polyhedron keeps its tilted 3/4 facet view; the
+// robot stands upright — only mouse-tilt + auto-spin move them, not the swap.)
 const POLY_POSE_A: Euler3 = [0.2, 0.35, 0];
-const POLY_POSE_B: Euler3 = [-0.15, 0.9, 0.08];
+const POLY_POSE_B: Euler3 = POLY_POSE_A;
 const ROBOT_POSE_A: Euler3 = [0, 0, 0];
-const ROBOT_POSE_B: Euler3 = [0, 0.6, 0];
+const ROBOT_POSE_B: Euler3 = ROBOT_POSE_A;
 
 // Normalize every shape to this bounding radius so camera framing (z 2.9,
 // fov 45) works for any geometry.
