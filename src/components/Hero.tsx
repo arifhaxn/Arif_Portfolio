@@ -52,7 +52,7 @@ export function Hero() {
         <div className="relative aspect-square w-[100vmin]">
           {/* zoom kept modest so the WHOLE robot stays in frame (the model is
               normalized by its bounding sphere, so it only fills ~68% at zoom 1). */}
-          <HeroHead shape="robot" zoom={1.1} />
+          <HeroHead shape="robot" zoom={0.95} />
         </div>
       </div>
 
@@ -96,10 +96,10 @@ export function Hero() {
         </h1>
       </div>
 
-      {/* --- Socials — bottom-RIGHT --------------------------------------- */}
+      {/* --- Socials — bottom-RIGHT (monochrome icons) -------------------- */}
       <div
         data-hero-line
-        className="absolute bottom-12 right-6 z-10 flex items-center gap-5 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 sm:right-10"
+        className="absolute bottom-12 right-6 z-10 flex items-center gap-5 text-zinc-400 sm:right-10"
       >
         {SOCIALS.map((s) => (
           <a
@@ -107,9 +107,12 @@ export function Hero() {
             href={s.href}
             target="_blank"
             rel="noopener noreferrer"
+            aria-label={s.label}
             className="transition-colors hover:text-white"
           >
-            {s.label}
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden>
+              <path d={s.icon} />
+            </svg>
           </a>
         ))}
       </div>
