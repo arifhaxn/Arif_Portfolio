@@ -39,6 +39,7 @@ export function AchievementModal({
   const root = useRef<HTMLDivElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
+  const card = useRef<HTMLDivElement>(null);
 
   // Play the close animation, then let the parent unmount us.
   const close = () => achievementModalOut(backdrop.current!, panel.current!, onClose);
@@ -51,7 +52,9 @@ export function AchievementModal({
   useEffect(() => {
     const tiles = root.current!.querySelectorAll("[data-block]");
     const tl = achievementModalIn(backdrop.current!, panel.current!, tiles);
-    const stopTilt = achievementCardTilt(panel.current!, root.current!);
+    // Tilt ONLY the card, and only while the cursor is over the card itself —
+    // the title/Esc caption below never moves.
+    const stopTilt = achievementCardTilt(card.current!, card.current!);
     return () => {
       tl.kill();
       stopTilt();
@@ -80,8 +83,7 @@ export function AchievementModal({
       role="dialog"
       aria-modal="true"
       aria-label={`${achievement.title} certificate`}
-      // perspective makes the card's 3D mouse-tilt read.
-      className="fixed inset-0 z-[60] flex items-center justify-center p-6 [perspective:1200px]"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-6"
     >
       {/* Backdrop — click to dismiss. Light + strongly blurred so the pannable
           board clearly shows through (blurred) behind the floating card. */}
@@ -92,15 +94,20 @@ export function AchievementModal({
       />
 
       {/* Panel — a small card floating over the blurred screen. Stop propagation
-          so clicks inside don't dismiss. */}
+          so clicks inside don't dismiss. perspective is here so only the card
+          (its child) tilts in 3D — the caption row stays flat. */}
       <div
         ref={panel}
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 w-full max-w-lg will-change-transform"
+        className="relative z-10 w-full max-w-lg will-change-transform [perspective:1200px]"
       >
         {/* Certificate image (or enlarged placeholder), with the pixel-block
-            dissolve overlay on top. overflow-hidden clips tiles to the rounding. */}
-        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-gradient-to-br from-zinc-900 via-zinc-950 to-black ring-1 ring-white/15">
+            dissolve overlay on top. overflow-hidden clips tiles to the rounding.
+            This card is the only element that mouse-tilts. */}
+        <div
+          ref={card}
+          className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-gradient-to-br from-zinc-900 via-zinc-950 to-black ring-1 ring-white/15 will-change-transform"
+        >
           {achievement.image ? (
             <Image
               src={achievement.image}
