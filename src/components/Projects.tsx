@@ -191,7 +191,9 @@ export function Projects() {
             ref={bgShape}
             className="relative aspect-square w-[clamp(24rem,42vw,34rem)] opacity-0"
           >
-            <HeroHead />
+            {/* Slow idle auto-spin on the ambient centerpiece; mouse tilt still
+                tracks on top of it. */}
+            <HeroHead spin={0.12} />
           </div>
         </div>
       </div>
