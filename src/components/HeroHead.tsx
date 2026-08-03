@@ -57,17 +57,23 @@ import {
 } from "@/lib/animations";
 
 // -----------------------------------------------------------------------------
-// Halftone (Style B) shader — screen-space dot-matrix over the lit solid mesh.
-// A fixed view-space light gives each facet a luminance; the dot's radius grows
-// with that luminance (bright/top → big dense dots, shadow → thin to nothing),
-// aligned to a screen-pixel grid so it reads like newspaper halftone. White dots
-// on transparent; `uOpacity` is driven by the style crossfade.
+// Halftone (Style B) shader — screen-space dot-matrix of the LIT solid mesh.
+// Per fragment we shade the surface (Blinn-Phong: diffuse falloff + a specular
+// highlight sweep, from a fixed top-front view-space light) to a luminance, then
+// map that luminance to the dot RADIUS on a screen-pixel grid: bright highlight
+// facets → big dense dots, shadow → thin to nothing. Strong contrast so the
+// tonal range reads like a halftone-of-a-photo, not a flat silhouette. Because
+// the normals are in view space, the tone shifts live as the model tilts/spins.
+// White dots on transparent; `uOpacity` is driven by the style crossfade.
 // -----------------------------------------------------------------------------
 const HALFTONE_VERTEX = /* glsl */ `
   varying vec3 vViewNormal;
+  varying vec3 vViewPos;
   void main() {
+    vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+    vViewPos = mvPos.xyz;
     vViewNormal = normalize(normalMatrix * normal);
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mvPos;
   }
 `;
 const HALFTONE_FRAGMENT = /* glsl */ `
@@ -75,15 +81,22 @@ const HALFTONE_FRAGMENT = /* glsl */ `
   uniform float uDotSize;
   uniform vec3 uLightDir;
   varying vec3 vViewNormal;
+  varying vec3 vViewPos;
   void main() {
     if (uOpacity <= 0.001) discard;
-    float ndl = dot(normalize(vViewNormal), normalize(uLightDir));
-    float lum = clamp(ndl * 0.5 + 0.55, 0.0, 1.0);
-    lum = pow(lum, 1.5); // contrast: shadows thin out toward nothing
+    vec3 N = normalize(vViewNormal);
+    vec3 L = normalize(uLightDir);
+    vec3 V = normalize(-vViewPos);        // fragment → camera (view space)
+    vec3 H = normalize(L + V);
+    float diff = clamp(dot(N, L), 0.0, 1.0);
+    float spec = pow(clamp(dot(N, H), 0.0, 1.0), 22.0); // tight highlight sweep
+    float lum = diff * 0.9 + spec * 0.7 + 0.04;         // + faint ambient floor
+    // Strong tonal remap: darks fall to nothing, highlights go fully dense.
+    lum = smoothstep(0.06, 0.92, lum);
     vec2 cell = mod(gl_FragCoord.xy, uDotSize) / uDotSize - 0.5;
     float dist = length(cell) * 2.0;
-    float radius = sqrt(lum) * 1.1; // area ~ luminance
-    float coverage = 1.0 - smoothstep(radius - 0.12, radius + 0.12, dist);
+    float radius = sqrt(lum) * 1.15; // dot area ~ luminance
+    float coverage = 1.0 - smoothstep(radius - 0.1, radius + 0.1, dist);
     float a = coverage * uOpacity;
     if (a < 0.01) discard;
     gl_FragColor = vec4(vec3(1.0), a);
@@ -237,7 +250,7 @@ function ShapeMeshes({
     () => ({
       uOpacity: { value: 0 },
       uDotSize: { value: 8 }, // device px per dot cell
-      uLightDir: { value: new Vector3(0.25, 0.7, 0.85) }, // view-space, upper-front
+      uLightDir: { value: new Vector3(0.2, 0.85, 0.45) }, // view-space, TOP-front
     }),
     [],
   );
