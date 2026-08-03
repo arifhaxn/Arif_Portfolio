@@ -163,6 +163,25 @@ export function pixelRevealCoverInstant(cells: Target) {
 }
 
 // -----------------------------------------------------------------------------
+// Marquee (seamless horizontal loop)
+// -----------------------------------------------------------------------------
+
+/**
+ * Seamless horizontal marquee: the `track` must contain its content DUPLICATED
+ * back-to-back; translating it -50% and repeating loops seamlessly. Linear,
+ * infinite. Reduced motion: static (no tween).
+ */
+export function marqueeLoop(track: Target, duration = 20) {
+  if (prefersReducedMotion()) return gsap.timeline();
+  return gsap.to(track, {
+    xPercent: -50,
+    duration,
+    ease: "none",
+    repeat: -1,
+  });
+}
+
+// -----------------------------------------------------------------------------
 // Load / intro
 // -----------------------------------------------------------------------------
 

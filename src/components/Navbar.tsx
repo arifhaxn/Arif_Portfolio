@@ -26,9 +26,9 @@ import { ScrambleText } from "@/components/ScrambleText";
 // its own real route.
 const LINKS = [
   { label: "Projects", href: "/#projects" },
-  { label: "About", href: "/#about" },
+  { label: "About", href: "/about" },
   { label: "Achievements", href: "/achievements" },
-  { label: "Contact", href: "/#contact" },
+  { label: "Contact", href: "/about#contact" },
 ];
 
 export function Navbar() {

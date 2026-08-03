@@ -60,9 +60,10 @@ export function Hero() {
           reserves space so there's no load-time shift. */}
       <div
         aria-hidden
-        className="relative aspect-square w-[clamp(14rem,42vw,21rem)]"
+        className="relative aspect-square w-[clamp(18rem,52vmin,38rem)]"
       >
-        <HeroHead />
+        {/* Enlarged robot as the landing centerpiece (was the icosahedron). */}
+        <HeroHead shape="robot" />
       </div>
 
       {/* --- Nameplate / heading (below the visual) -------------------------- */}
