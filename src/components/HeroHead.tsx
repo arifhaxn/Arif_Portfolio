@@ -116,10 +116,10 @@ const HALFTONE_FRAGMENT = /* glsl */ `
 // style mix, so the field fades in/out with the halftone. Constant screen-size
 // squares = pixelated look.
 // -----------------------------------------------------------------------------
-const PARTICLE_COLS = 30;
-const PARTICLE_ROWS = 17;
-const PARTICLE_W = 9; // world-unit spread (overfills the framed background)
-const PARTICLE_H = 5.5;
+const PARTICLE_COLS = 46;
+const PARTICLE_ROWS = 28;
+const PARTICLE_W = 15; // world-unit spread — overfills even a full-viewport wide canvas
+const PARTICLE_H = 9;
 
 /** Grid of background points with per-point seed + parallax-depth attributes. */
 function buildParticleGeometry(): BufferGeometry {

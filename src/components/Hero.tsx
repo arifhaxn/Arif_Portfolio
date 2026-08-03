@@ -43,13 +43,16 @@ export function Hero() {
       className="relative flex min-h-screen items-center justify-center overflow-hidden"
     >
       {/* --- Giant robot centerpiece — fills the viewport (behind the HUD) --- */}
-      {/* Explicitly-sized square (vmin) so R3F measures the canvas reliably;
-          centered and clipped by the section. `zoom` enlarges the model. */}
+      {/* On desktop the canvas is FULL-viewport so the background particle field
+          spans the whole landing (not just a centered square); the camera frames
+          the robot by height, so the wider canvas doesn't change the robot's size,
+          it only adds room for particles left/right. On mobile it stays a centered
+          square (100vmin) so the height-framed robot isn't oversized in portrait. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center"
       >
-        <div className="relative aspect-square w-[100vmin]">
+        <div className="relative aspect-square w-[100vmin] lg:aspect-auto lg:h-full lg:w-full">
           {/* zoom kept modest so the WHOLE robot stays in frame (the model is
               normalized by its bounding sphere, so it only fills ~68% at zoom 1). */}
           <HeroHead shape="robot" zoom={0.95} />
