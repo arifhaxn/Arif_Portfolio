@@ -175,6 +175,20 @@ export function Projects() {
     thumbRailSwap(out, inc);
   }, [active]);
 
+  // R3F can mis-measure the ambient background canvas on first paint inside this
+  // pinned/sticky section — it renders small in the top-left until the first
+  // scroll re-measures it. Nudge a re-measure (window resize is what R3F's
+  // measurer listens to) once after mount and again once layout has settled.
+  useEffect(() => {
+    const fire = () => window.dispatchEvent(new Event("resize"));
+    const raf = requestAnimationFrame(fire);
+    const t = setTimeout(fire, 300);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t);
+    };
+  }, []);
+
   return (
     <section id="projects" ref={root} className="relative bg-black px-6 sm:px-10">
       {/* ====== Desktop: ambient background polyhedron (behind everything) == */}
