@@ -1,30 +1,27 @@
 "use client";
 
 // -----------------------------------------------------------------------------
-// Hero
+// Hero — landing
 // -----------------------------------------------------------------------------
-// Two motions live here:
+// Reference-matched landing: the enlarged robot fills the viewport center, with
+// HUD text on the sides — the live clock/status at mid-LEFT, a short status at
+// mid-RIGHT, the name in the bottom-LEFT (like the /about hero), and socials in
+// the bottom-RIGHT. Everything but the robot fades in via `navIntro`; the name
+// and eyebrow also scramble (ScrambleText).
 //
-//   1. Nameplate intro — the heading lines fade in (opacity 0→1) and rise
-//      (y: 20 → 0), same timing family as the nav (0.7s / power3.out / ~0.075s
-//      stagger) but kicked off with a small `delay` so the NAV leads and the
-//      HERO follows. Reuses the foundation's `navIntro` helper. (Unchanged.)
-//
-//   2. The 3D head — the mouse-tilt and pose cross-fade now live inside the R3F
-//      <HeroHead> component (they were retargeted from DOM boxes onto the 3D
-//      object), so this file no longer wires them. HeroHead is loaded client-only
-//      via next/dynamic because a WebGL <Canvas> can't render on the server.
+// The 3D robot's mouse-tilt + pose cross-fade live inside <HeroHead>; it's loaded
+// client-only via next/dynamic (WebGL can't render on the server). `zoom` scales
+// the model up so it fills the viewport like the reference figure.
 // -----------------------------------------------------------------------------
 
 import { useRef } from "react";
 import dynamic from "next/dynamic";
 import { useGSAP } from "@/lib/gsap";
 import { navIntro } from "@/lib/animations";
-import { CodingSince, LiveStatus } from "@/components/Hud";
+import { LiveStatus } from "@/components/Hud";
 import { ScrambleText } from "@/components/ScrambleText";
+import { SOCIALS } from "@/lib/about";
 
-// ssr:false — the WebGL canvas is client-only. The sized wrapper below reserves
-// the space so there's no layout shift while it loads.
 const HeroHead = dynamic(
   () => import("@/components/HeroHead").then((m) => m.HeroHead),
   { ssr: false },
@@ -35,9 +32,7 @@ export function Hero() {
 
   useGSAP(
     () => {
-      // Heading: y: 20 → 0. `delay` makes the hero enter just after the nav,
-      // so the eye reads nav → hero rather than everything at once.
-      navIntro("[data-hero-line]", 20, { delay: 0.25 });
+      navIntro("[data-hero-line]", 12, { delay: 0.2 });
     },
     { scope: root },
   );
@@ -45,41 +40,50 @@ export function Hero() {
   return (
     <section
       ref={root}
-      // Top-aligned so spacing is deterministic: pt-28 clears the fixed navbar
-      // with breathing room above the head, and the tight gap-6 pulls the
-      // nameplate up close beneath it (balanced, not crammed-top/far-bottom).
-      // relative: anchors the absolute HUD corner elements below.
-      className="relative flex min-h-screen flex-col items-center gap-6 px-6 pt-28 text-center"
+      className="relative flex min-h-screen items-center justify-center overflow-hidden"
     >
-      {/* --- 3D low-poly wireframe head (hero visual, anchors the top) ------- */}
-      {/* Responsive via clamp(): floor 14rem, ~42vw fluid, cap 21rem. The head
-          silhouette fills ~⅔ of the square canvas (the rest is transparent over
-          black, so invisible), which lands the visible head at ≈ the nameplate
-          width across breakpoints. 42vw always leaves side margin, so it never
-          overflows or pushes the text. aspect-square keeps it square; the box
-          reserves space so there's no load-time shift. */}
+      {/* --- Giant robot centerpiece — fills the viewport (behind the HUD) --- */}
+      {/* Explicitly-sized square (vmin) so R3F measures the canvas reliably;
+          centered and clipped by the section. `zoom` enlarges the model. */}
       <div
         aria-hidden
-        className="relative aspect-square w-[clamp(18rem,52vmin,38rem)]"
+        className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center"
       >
-        {/* Enlarged robot as the landing centerpiece (was the icosahedron). */}
-        <HeroHead shape="robot" />
+        <div className="relative aspect-square w-[105vmin]">
+          <HeroHead shape="robot" zoom={1.4} />
+        </div>
       </div>
 
-      {/* --- Nameplate / heading (below the visual) -------------------------- */}
-      {/* Each line is a ScrambleText; navIntro (data-hero-line) drives the
-          entrance scramble in sync with the fade+rise, and hover replays. */}
-      <div className="flex flex-col items-center gap-2">
+      {/* --- Clock / status — middle-LEFT, vertically centered ------------- */}
+      <div
+        data-hero-line
+        className="absolute left-6 top-1/2 z-10 -translate-y-1/2 sm:left-10"
+      >
+        <LiveStatus />
+      </div>
+
+      {/* --- Status line — middle-RIGHT, vertically centered, right-aligned -- */}
+      {/* ⚠ placeholder status copy — tweak to taste. */}
+      <div
+        data-hero-line
+        className="absolute right-6 top-1/2 z-10 -translate-y-1/2 text-right font-mono text-[10px] uppercase leading-relaxed tracking-[0.2em] text-zinc-500 sm:right-10"
+      >
+        <span className="block text-zinc-300">Building quietly</span>
+        <span className="block">from Sylhet, BD</span>
+      </div>
+
+      {/* --- Name — bottom-LEFT, like the /about hero --------------------- */}
+      <div className="absolute bottom-12 left-6 z-10 text-left sm:left-10">
         <ScrambleText
           as="p"
           data-hero-line
-          className="text-xs font-medium uppercase tracking-[0.3em] text-zinc-500"
+          className="font-mono text-xs uppercase tracking-[0.3em] text-blue-400"
         >
           / Full-Stack Developer
         </ScrambleText>
         <h1
           data-hero-line
-          className="text-5xl font-semibold tracking-tight text-white sm:text-7xl"
+          className="mt-3 text-6xl font-semibold leading-[0.9] tracking-tight text-white sm:text-8xl"
         >
           <ScrambleText as="span" className="block">
             Arif
@@ -88,22 +92,24 @@ export function Hero() {
             Hasan
           </ScrambleText>
         </h1>
-        <ScrambleText
-          as="p"
-          data-hero-line
-          className="max-w-md text-sm text-zinc-400 sm:text-base"
-        >
-          Designer & developer building motion-led interfaces.
-        </ScrambleText>
       </div>
 
-      {/* --- HUD corners (shared with About) --------------------------------- */}
-      {/* data-hero-line: they join the existing nameplate intro stagger. */}
-      <div data-hero-line className="absolute bottom-8 left-6 sm:left-10">
-        <LiveStatus />
-      </div>
-      <div data-hero-line className="absolute bottom-8 right-6 sm:right-10">
-        <CodingSince />
+      {/* --- Socials — bottom-RIGHT --------------------------------------- */}
+      <div
+        data-hero-line
+        className="absolute bottom-12 right-6 z-10 flex items-center gap-5 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 sm:right-10"
+      >
+        {SOCIALS.map((s) => (
+          <a
+            key={s.label}
+            href={s.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="transition-colors hover:text-white"
+          >
+            {s.label}
+          </a>
+        ))}
       </div>
     </section>
   );

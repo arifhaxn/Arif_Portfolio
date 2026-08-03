@@ -155,6 +155,7 @@ function ShapeMeshes({
   style = POLY_STYLE,
   tilt,
   spin = 0,
+  zoom = 1,
 }: {
   geometry: BufferGeometry;
   scale?: number;
@@ -164,6 +165,8 @@ function ShapeMeshes({
   tilt: React.RefObject<{ x: number; y: number }>;
   /** Continuous idle spin about Y, in radians/sec (0 = none). */
   spin?: number;
+  /** Extra scale multiplier so the model can fill more of its canvas (1 = fit). */
+  zoom?: number;
 }) {
   const group = useRef<Group>(null);
   const matA = useRef<MeshBasicMaterial | LineBasicMaterial>(null);
@@ -197,7 +200,7 @@ function ShapeMeshes({
 
   return (
     <group ref={group}>
-      <Center scale={scale}>
+      <Center scale={scale * zoom}>
         {style.renderAs === "lines" ? (
           <>
             <lineSegments geometry={geometry} rotation={poseA}>
@@ -256,13 +259,15 @@ function ShapeMeshes({
 function PolyShape({
   tilt,
   spin = 0,
+  zoom = 1,
 }: {
   tilt: React.RefObject<{ x: number; y: number }>;
   spin?: number;
+  zoom?: number;
 }) {
   const geometry = useMemo(() => new IcosahedronGeometry(FIT_RADIUS, 0), []);
   useEffect(() => () => geometry.dispose(), [geometry]);
-  return <ShapeMeshes geometry={geometry} tilt={tilt} spin={spin} />;
+  return <ShapeMeshes geometry={geometry} tilt={tilt} spin={spin} zoom={zoom} />;
 }
 
 /**
@@ -275,9 +280,11 @@ function PolyShape({
 function RobotShape({
   tilt,
   spin = 0,
+  zoom = 1,
 }: {
   tilt: React.RefObject<{ x: number; y: number }>;
   spin?: number;
+  zoom?: number;
 }) {
   const { scene } = useGLTF("/robot.glb");
 
@@ -322,6 +329,7 @@ function RobotShape({
       style={ROBOT_STYLE}
       tilt={tilt}
       spin={spin}
+      zoom={zoom}
     />
   );
 }
@@ -329,10 +337,13 @@ function RobotShape({
 export function HeroHead({
   shape = "icosahedron",
   spin = 0,
+  zoom = 1,
 }: {
   shape?: HeadShape;
   /** Continuous slow auto-spin about Y (radians/sec). Mouse tilt still applies. */
   spin?: number;
+  /** Scale multiplier so the model fills more of its canvas (1 = default fit). */
+  zoom?: number;
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
   const [inView, setInView] = useState(true);
@@ -376,9 +387,9 @@ export function HeroHead({
       >
         <Suspense fallback={null}>
           {shape === "robot" ? (
-            <RobotShape tilt={tilt} spin={spin} />
+            <RobotShape tilt={tilt} spin={spin} zoom={zoom} />
           ) : (
-            <PolyShape tilt={tilt} spin={spin} />
+            <PolyShape tilt={tilt} spin={spin} zoom={zoom} />
           )}
         </Suspense>
       </Canvas>
