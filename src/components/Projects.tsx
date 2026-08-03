@@ -82,6 +82,9 @@ export function Projects() {
   const [active, setActive] = useState(0);
   const prevActive = useRef(0);
 
+  // Gate the ambient background canvas until the layout has settled (below).
+  const [bgReady, setBgReady] = useState(false);
+
   useGSAP(
     () => {
       const mm = gsap.matchMedia();
@@ -175,17 +178,17 @@ export function Projects() {
     thumbRailSwap(out, inc);
   }, [active]);
 
-  // R3F can mis-measure the ambient background canvas on first paint inside this
-  // pinned/sticky section — it renders small in the top-left until the first
-  // scroll re-measures it. Nudge a re-measure (window resize is what R3F's
-  // measurer listens to) once after mount and again once layout has settled.
+  // The ambient background canvas mounts only AFTER the pinned/sticky + Lenis
+  // layout has settled, so R3F measures the correct size on its first pass (it
+  // otherwise renders small in the top-left until the first scroll re-measures
+  // it). A late resize nudge covers any residual shift. The short delay is
+  // invisible — the pixel-reveal cover is still dissolving over the page then.
   useEffect(() => {
-    const fire = () => window.dispatchEvent(new Event("resize"));
-    const raf = requestAnimationFrame(fire);
-    const t = setTimeout(fire, 300);
+    const mount = setTimeout(() => setBgReady(true), 150);
+    const nudge = setTimeout(() => window.dispatchEvent(new Event("resize")), 600);
     return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(t);
+      clearTimeout(mount);
+      clearTimeout(nudge);
     };
   }, []);
 
@@ -206,8 +209,9 @@ export function Projects() {
             className="relative aspect-square w-[clamp(24rem,42vw,34rem)] opacity-0"
           >
             {/* Slow idle auto-spin on the ambient centerpiece; mouse tilt still
-                tracks on top of it. */}
-            <HeroHead spin={0.12} />
+                tracks on top of it. Mounted after layout settles (bgReady) so the
+                canvas measures/centres correctly on first paint. */}
+            {bgReady && <HeroHead spin={0.12} />}
           </div>
         </div>
       </div>
