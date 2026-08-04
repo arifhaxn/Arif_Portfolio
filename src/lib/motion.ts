@@ -102,6 +102,23 @@ export const STYLE_SHIFT = {
 } as const;
 
 /**
+ * Robot idle arm-breathe (see `armBreathe` + HeroHead's shoulder-pivot vertex
+ * displacement). The About/Hero robot is a single fused mesh — no separate arm
+ * nodes — so the lower-arm vertices are swung about a fixed shoulder pivot in a
+ * slow sine loop by a vertex shader (Path B). This layers on top of the pointer
+ * tilt / pose cross-fade / style shift as another independent idle motion; it
+ * never moves the icosahedron (no arms) and is disabled under reduced motion.
+ * `swayDeg` is the peak shoulder rotation (spec range ~2–4°); `cycle` is one full
+ * breathe period; `phaseOffset` desyncs the two arms (fraction of a cycle) so they
+ * don't read as mechanically mirrored/identical.
+ */
+export const ARM_BREATHE = {
+  swayDeg: 3.2, // peak lower-arm rotation about the shoulder (±deg)
+  cycle: 5.5, // seconds per full breathe cycle (slow, calm)
+  phaseOffset: 0.37, // left arm's phase lag vs right, as a fraction of a cycle
+} as const;
+
+/**
  * Text-scramble / decode effect (see ScrambleText + `scrambleText`). Characters
  * cycle through random glyphs and lock in left-to-right. `duration` is the reveal
  * speed per element; `sweep` is the fraction of the timeline the L→R lock points

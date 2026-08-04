@@ -17,6 +17,7 @@
 import { gsap, ScrollTrigger, Observer, Flip } from "@/lib/gsap";
 import {
   ACHIEVE,
+  ARM_BREATHE,
   DURATION,
   EASE,
   GALLERY,
@@ -441,6 +442,28 @@ export function styleShift(target: { v: number }) {
   glitch(toA);
   tl.to(target, { v: 0, duration: STYLE_SHIFT.hold }); // hold style A
   return tl;
+}
+
+/**
+ * Robot idle arm-breathe — advances a normalized phase 0→1 on a slow, LINEAR
+ * infinite loop over `ARM_BREATHE.cycle`. The value is consumed by HeroHead's
+ * vertex shader, which swings the lower-arm vertices about a fixed shoulder pivot
+ * (`sin(2π·phase)`), so the shoulder end stays put and the arm gently sways. Runs
+ * on the shared ticker like every other idle motion and layers on top of the
+ * pointer tilt / pose cross-fade / style shift without touching them. Linear ease
+ * + a 0→1 range keep the sine (and its slope) continuous across the loop seam, so
+ * there's no jerk on repeat. Reduced motion: no loop — the phase stays 0 and the
+ * caller holds the shader amplitude at 0, so the arms are simply static. Returns
+ * the repeating tween (kill it on cleanup).
+ */
+export function armBreathe(target: { phase: number }): gsap.core.Tween {
+  if (prefersReducedMotion()) return gsap.to({}, { duration: 0 });
+  return gsap.to(target, {
+    phase: 1,
+    duration: ARM_BREATHE.cycle,
+    ease: "none",
+    repeat: -1,
+  });
 }
 
 /**

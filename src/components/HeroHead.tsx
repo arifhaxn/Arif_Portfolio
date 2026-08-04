@@ -53,11 +53,62 @@ import {
   type ShaderMaterial,
 } from "three";
 import {
+  armBreathe,
   headPointerTilt,
   idlePoseSwap,
   prefersReducedMotion,
   styleShift,
 } from "@/lib/animations";
+import { ARM_BREATHE } from "@/lib/motion";
+
+// -----------------------------------------------------------------------------
+// ▶ ROBOT ARM-BREATHE (Path B) — shoulder-pivot vertex sway for the fused mesh.
+// robot.glb is ONE fused mesh (no separate arm nodes, no skin), so the lower-arm
+// vertices can't be rotated as a child node. Instead this GLSL swings them about
+// a FIXED per-side shoulder pivot in the mesh's local space: a vertex's sway
+// weight ramps in past the torso edge in |x| and below the shoulder line in y,
+// and the rotation is applied about that pivot — so the shoulder end never moves
+// (weight × displacement → 0 there) and the hand swings most. The |x| falloff
+// band sits in the empty gap between torso and arm, so there's no visible seam.
+// Shared verbatim by the halftone shader (below) and the crease-line materials
+// (patched via onBeforeCompile) so both render styles swing identically.
+//
+// Zone constants are in robot.glb's LOCAL space (derived from a vertex-position
+// analysis: arms are |x| ≳ 0.44 in y ≈ 0.2…−0.6; re-derive if the model changes).
+// The animated inputs are uniforms: uArmPhase (0..1 loop from `armBreathe`),
+// uArmAmp (peak radians; 0 disables — icosahedron / reduced motion), and
+// uArmPhaseOffset (left arm's phase lag so the two aren't mirrored/identical).
+// -----------------------------------------------------------------------------
+const ARM_BREATHE_GLSL = /* glsl */ `
+  uniform float uArmPhase;       // 0..1 normalized breathe phase (right arm)
+  uniform float uArmAmp;         // peak sway angle, radians (0 = disabled)
+  uniform float uArmPhaseOffset; // left arm's phase lag (fraction of a cycle)
+  const float ARM_X_INNER = 0.40; // torso edge — below this |x|, no sway
+  const float ARM_X_OUTER = 0.52; // fully arm past this |x|
+  const float ARM_Y_TOP   = 0.24; // shoulder line — above this y, no sway
+  const float ARM_Y_BODY  = 0.05; // fully swung below this y
+  const float ARM_PIVOT_X = 0.48; // shoulder-joint |x|
+  const float ARM_PIVOT_Y = 0.22; // shoulder-joint y
+  vec3 applyArmBreathe(vec3 p) {
+    if (uArmAmp <= 0.0) return p;             // disabled: icosahedron / reduced motion
+    float side = sign(p.x);                   // -1 left arm, +1 right arm
+    float sideW  = smoothstep(ARM_X_INNER, ARM_X_OUTER, abs(p.x));
+    float belowW = 1.0 - smoothstep(ARM_Y_BODY, ARM_Y_TOP, p.y);
+    float w = sideW * belowW;                 // 0 on torso/head/legs, 1 on the lower arm
+    if (w <= 0.0) return p;
+    float ph = uArmPhase + (side < 0.0 ? uArmPhaseOffset : 0.0);
+    float angle = uArmAmp * sin(ph * 6.2831853);
+    vec2 pivot = vec2(ARM_PIVOT_X * side, ARM_PIVOT_Y);
+    vec2 rel = p.xy - pivot;                   // pendulum swing in the XY plane
+    float s = sin(angle), c = cos(angle);
+    vec2 rotated = vec2(c * rel.x - s * rel.y, s * rel.x + c * rel.y);
+    p.xy = mix(p.xy, pivot + rotated, w);      // shoulder stays put; hand swings most
+    return p;
+  }
+`;
+
+// Peak sway as radians (the token is authored in degrees for readability).
+const ARM_SWAY_RAD = MathUtils.degToRad(ARM_BREATHE.swayDeg);
 
 // -----------------------------------------------------------------------------
 // Halftone (Style B) shader — screen-space dot-matrix of the LIT solid mesh.
@@ -72,8 +123,13 @@ import {
 const HALFTONE_VERTEX = /* glsl */ `
   varying vec3 vViewNormal;
   varying vec3 vViewPos;
+  ${ARM_BREATHE_GLSL}
   void main() {
-    vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+    // Swing the lower-arm vertices from the shoulder before shading (robot only;
+    // a no-op when uArmAmp is 0). Normals are left unrotated — the sway is a few
+    // degrees, so the lighting shift is imperceptible.
+    vec3 armPos = applyArmBreathe(position);
+    vec4 mvPos = modelViewMatrix * vec4(armPos, 1.0);
     vViewPos = mvPos.xyz;
     vViewNormal = normalize(normalMatrix * normal);
     gl_Position = projectionMatrix * mvPos;
@@ -372,6 +428,7 @@ function ShapeMeshes({
   tilt,
   spin = 0,
   zoom = 1,
+  arms = false,
 }: {
   /** Style A geometry — line set (robot) or wireframe mesh (icosahedron). */
   geometry: BufferGeometry;
@@ -386,6 +443,8 @@ function ShapeMeshes({
   spin?: number;
   /** Extra scale multiplier so the model can fill more of its canvas (1 = fit). */
   zoom?: number;
+  /** Enable the shoulder-pivot arm-breathe sway (robot only — it has arms). */
+  arms?: boolean;
 }) {
   const group = useRef<Group>(null);
   const matA = useRef<MeshBasicMaterial | LineBasicMaterial>(null);
@@ -394,6 +453,14 @@ function ShapeMeshes({
   // Accumulated auto-spin angle (radians). Reduced motion disables the spin.
   const spinAngle = useRef(0);
   const reduce = useMemo(() => prefersReducedMotion(), []);
+
+  // Arm-breathe (robot only). `armPhase` is looped 0→1 by the `armBreathe` GSAP
+  // tween. The shader uniforms live inside `halftoneUniforms` below and are shared
+  // BY REFERENCE with the crease-line materials (patched in an effect), so both
+  // render styles swing identically. They're mutated only through the material
+  // ref (like uOpacity) — never the memoized object directly. uArmAmp is held at 0
+  // for the icosahedron / reduced motion, which no-ops the shader displacement.
+  const armPhase = useRef({ phase: 0 });
 
   // Pose cross-fade drives these plain values (not the materials directly), so
   // the separate STYLE cross-fade can multiply on top without a GSAP conflict.
@@ -410,6 +477,11 @@ function ShapeMeshes({
       uOpacity: { value: 0 },
       uDotSize: { value: 8 }, // device px per dot cell
       uLightDir: { value: new Vector3(0.2, 0.85, 0.45) }, // view-space, TOP-front
+      // Arm-breathe inputs (robot). The crease-line materials point their own
+      // shader uniforms at these very objects, so one write here swings both.
+      uArmPhase: { value: 0 }, // 0..1 breathe phase, published each frame
+      uArmAmp: { value: 0 }, // peak sway radians; 0 = disabled (poly / reduced)
+      uArmPhaseOffset: { value: ARM_BREATHE.phaseOffset }, // left-arm desync
     }),
     [],
   );
@@ -424,6 +496,46 @@ function ShapeMeshes({
     };
   }, []);
 
+  // Drive the breathe phase on the shared GSAP ticker (robot, motion allowed).
+  useEffect(() => {
+    if (!arms || reduce) return;
+    const tw = armBreathe(armPhase.current);
+    return () => {
+      tw.kill();
+    };
+  }, [arms, reduce]);
+
+  // Patch the crease-line materials so they displace vertices exactly like the
+  // halftone shader does — lineBasicMaterial has no custom vertex stage otherwise,
+  // and the two styles must stay registered through the crossfade. The line shader
+  // uniforms are pointed at the SAME objects that live in `halftoneUniforms`, so a
+  // single per-frame write (via the halftone material ref) swings both styles.
+  // Everything else about the line materials (color, additive blending, the
+  // pose-crossfade opacity) is left untouched; only the vertex position swings.
+  useEffect(() => {
+    if (!arms) return;
+    const shared = halftoneUniforms; // read-only here; mutated only via the ref
+    for (const ref of [matA, matB]) {
+      const m = ref.current;
+      if (!m) continue;
+      m.onBeforeCompile = (shader) => {
+        shader.uniforms.uArmPhase = shared.uArmPhase;
+        shader.uniforms.uArmAmp = shared.uArmAmp;
+        shader.uniforms.uArmPhaseOffset = shared.uArmPhaseOffset;
+        shader.vertexShader = shader.vertexShader
+          .replace("#include <common>", "#include <common>\n" + ARM_BREATHE_GLSL)
+          .replace(
+            "#include <begin_vertex>",
+            "#include <begin_vertex>\n  transformed = applyArmBreathe(transformed);",
+          );
+      };
+      // Distinct cache key so this patched program is never shared with an
+      // unpatched lineBasicMaterial (or vice-versa).
+      m.customProgramCacheKey = () => "robot-arm-breathe";
+      m.needsUpdate = true;
+    }
+  }, [arms, halftoneUniforms]);
+
   // Each frame: slow auto-spin + mouse look-at on the group, and the combined
   // pose × style opacity on Style A materials / the halftone opacity on Style B.
   useFrame((_, delta) => {
@@ -437,6 +549,16 @@ function ShapeMeshes({
     if (matA.current) matA.current.opacity = poseOpA.current.opacity * invMix;
     if (matB.current) matB.current.opacity = poseOpB.current.opacity * invMix;
     if (halftoneMat.current) halftoneMat.current.uniforms.uOpacity.value = mix;
+
+    // Publish the breathe amplitude + phase to the shared uniforms (robot only),
+    // through the material ref (never the memoized object directly). The patched
+    // line materials point at these same uniform objects, so both styles' arms
+    // swing in lockstep. Amplitude is held at 0 under reduced motion → arms static.
+    if (arms && halftoneMat.current) {
+      const u = halftoneMat.current.uniforms;
+      u.uArmAmp.value = reduce ? 0 : ARM_SWAY_RAD;
+      u.uArmPhase.value = armPhase.current.phase;
+    }
   });
 
   const blending = style.additive ? AdditiveBlending : NormalBlending;
@@ -626,6 +748,7 @@ function RobotShape({
       tilt={tilt}
       spin={spin}
       zoom={zoom}
+      arms // robot has arms → enable the shoulder-pivot breathe sway
     />
   );
 }
