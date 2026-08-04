@@ -38,19 +38,19 @@ import {
   AdditiveBlending,
   BufferAttribute,
   BufferGeometry,
+  Color,
   EdgesGeometry,
   FrontSide,
   IcosahedronGeometry,
   MathUtils,
   Mesh,
   NormalBlending,
+  ShaderMaterial,
   Vector2,
   Vector3,
   type Group,
-  type LineBasicMaterial,
   type MeshBasicMaterial,
   type Points,
-  type ShaderMaterial,
 } from "three";
 import {
   armBreathe,
@@ -109,6 +109,39 @@ const ARM_BREATHE_GLSL = /* glsl */ `
 
 // Peak sway as radians (the token is authored in degrees for readability).
 const ARM_SWAY_RAD = MathUtils.degToRad(ARM_BREATHE.swayDeg);
+
+// -----------------------------------------------------------------------------
+// Robot crease-line shader (Style A). The crease edges are drawn with an EXPLICIT
+// shader material — not lineBasicMaterial — so the exact same `applyArmBreathe`
+// vertex displacement as the halftone runs on the lines too (both styles must
+// swing in lockstep through the crossfade). The fragment is a flat color × the
+// pose-crossfade opacity, matching the old additive line look; `uColor`/`uOpacity`
+// replace the old material `color`/`opacity`. Arm uniforms are shared by reference
+// with the halftone (see `armUniforms`), so one per-frame write drives both.
+// -----------------------------------------------------------------------------
+const LINE_VERTEX = /* glsl */ `
+  ${ARM_BREATHE_GLSL}
+  void main() {
+    vec3 armPos = applyArmBreathe(position);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(armPos, 1.0);
+  }
+`;
+const LINE_FRAGMENT = /* glsl */ `
+  uniform vec3 uColor;
+  uniform float uOpacity;
+  void main() {
+    if (uOpacity <= 0.001) discard;
+    gl_FragColor = vec4(uColor, uOpacity);
+  }
+`;
+
+/** Write the Style A pose-crossfade opacity: a uniform for the robot's displacing
+ *  line shader (ShaderMaterial), the plain `.opacity` for the wireframe mesh. */
+function setPoseOpacity(m: MeshBasicMaterial | ShaderMaterial | null, v: number) {
+  if (!m) return;
+  if (m instanceof ShaderMaterial) m.uniforms.uOpacity.value = v;
+  else m.opacity = v;
+}
 
 // -----------------------------------------------------------------------------
 // Halftone (Style B) shader — screen-space dot-matrix of the LIT solid mesh.
@@ -447,20 +480,30 @@ function ShapeMeshes({
   arms?: boolean;
 }) {
   const group = useRef<Group>(null);
-  const matA = useRef<MeshBasicMaterial | LineBasicMaterial>(null);
-  const matB = useRef<MeshBasicMaterial | LineBasicMaterial>(null);
+  // Style A material refs. Robot → ShaderMaterial (crease lines, displacing);
+  // icosahedron → MeshBasicMaterial (wireframe). Mutually exclusive at runtime.
+  const matA = useRef<MeshBasicMaterial | ShaderMaterial>(null);
+  const matB = useRef<MeshBasicMaterial | ShaderMaterial>(null);
 
   // Accumulated auto-spin angle (radians). Reduced motion disables the spin.
   const spinAngle = useRef(0);
   const reduce = useMemo(() => prefersReducedMotion(), []);
 
   // Arm-breathe (robot only). `armPhase` is looped 0→1 by the `armBreathe` GSAP
-  // tween. The shader uniforms live inside `halftoneUniforms` below and are shared
-  // BY REFERENCE with the crease-line materials (patched in an effect), so both
-  // render styles swing identically. They're mutated only through the material
-  // ref (like uOpacity) — never the memoized object directly. uArmAmp is held at 0
-  // for the icosahedron / reduced motion, which no-ops the shader displacement.
+  // tween. `armUniforms` are the shared sway inputs — the SAME objects are spread
+  // into the halftone shader AND both crease-line shaders, so a single per-frame
+  // write (via the halftone material ref, never the memoized object directly)
+  // swings all three in lockstep. uArmAmp stays 0 for the icosahedron / reduced
+  // motion, which no-ops the displacement (arms static).
   const armPhase = useRef({ phase: 0 });
+  const armUniforms = useMemo(
+    () => ({
+      uArmPhase: { value: 0 }, // 0..1 breathe phase, published each frame
+      uArmAmp: { value: 0 }, // peak sway radians; 0 = disabled (poly / reduced)
+      uArmPhaseOffset: { value: ARM_BREATHE.phaseOffset }, // left-arm desync
+    }),
+    [],
+  );
 
   // Pose cross-fade drives these plain values (not the materials directly), so
   // the separate STYLE cross-fade can multiply on top without a GSAP conflict.
@@ -477,13 +520,20 @@ function ShapeMeshes({
       uOpacity: { value: 0 },
       uDotSize: { value: 8 }, // device px per dot cell
       uLightDir: { value: new Vector3(0.2, 0.85, 0.45) }, // view-space, TOP-front
-      // Arm-breathe inputs (robot). The crease-line materials point their own
-      // shader uniforms at these very objects, so one write here swings both.
-      uArmPhase: { value: 0 }, // 0..1 breathe phase, published each frame
-      uArmAmp: { value: 0 }, // peak sway radians; 0 = disabled (poly / reduced)
-      uArmPhaseOffset: { value: ARM_BREATHE.phaseOffset }, // left-arm desync
+      ...armUniforms, // shared sway inputs (also spread into the line shaders)
     }),
-    [],
+    [armUniforms],
+  );
+
+  // Style A crease-line uniforms (robot). Own color + pose-crossfade opacity, but
+  // the SAME arm-sway uniform objects as the halftone (spread by reference).
+  const lineUniformsA = useMemo(
+    () => ({ uColor: { value: new Color(style.colorA) }, uOpacity: { value: 1 }, ...armUniforms }),
+    [armUniforms, style.colorA],
+  );
+  const lineUniformsB = useMemo(
+    () => ({ uColor: { value: new Color(style.colorB) }, uOpacity: { value: 0 }, ...armUniforms }),
+    [armUniforms, style.colorB],
   );
 
   // Pose cross-fade (short cycle) + style shift (long cycle) run alongside.
@@ -505,37 +555,6 @@ function ShapeMeshes({
     };
   }, [arms, reduce]);
 
-  // Patch the crease-line materials so they displace vertices exactly like the
-  // halftone shader does — lineBasicMaterial has no custom vertex stage otherwise,
-  // and the two styles must stay registered through the crossfade. The line shader
-  // uniforms are pointed at the SAME objects that live in `halftoneUniforms`, so a
-  // single per-frame write (via the halftone material ref) swings both styles.
-  // Everything else about the line materials (color, additive blending, the
-  // pose-crossfade opacity) is left untouched; only the vertex position swings.
-  useEffect(() => {
-    if (!arms) return;
-    const shared = halftoneUniforms; // read-only here; mutated only via the ref
-    for (const ref of [matA, matB]) {
-      const m = ref.current;
-      if (!m) continue;
-      m.onBeforeCompile = (shader) => {
-        shader.uniforms.uArmPhase = shared.uArmPhase;
-        shader.uniforms.uArmAmp = shared.uArmAmp;
-        shader.uniforms.uArmPhaseOffset = shared.uArmPhaseOffset;
-        shader.vertexShader = shader.vertexShader
-          .replace("#include <common>", "#include <common>\n" + ARM_BREATHE_GLSL)
-          .replace(
-            "#include <begin_vertex>",
-            "#include <begin_vertex>\n  transformed = applyArmBreathe(transformed);",
-          );
-      };
-      // Distinct cache key so this patched program is never shared with an
-      // unpatched lineBasicMaterial (or vice-versa).
-      m.customProgramCacheKey = () => "robot-arm-breathe";
-      m.needsUpdate = true;
-    }
-  }, [arms, halftoneUniforms]);
-
   // Each frame: slow auto-spin + mouse look-at on the group, and the combined
   // pose × style opacity on Style A materials / the halftone opacity on Style B.
   useFrame((_, delta) => {
@@ -546,8 +565,10 @@ function ShapeMeshes({
 
     const mix = styleMix.current.v;
     const invMix = 1 - mix;
-    if (matA.current) matA.current.opacity = poseOpA.current.opacity * invMix;
-    if (matB.current) matB.current.opacity = poseOpB.current.opacity * invMix;
+    // Style A pose-crossfade opacity: robot lines carry it as a uniform, the
+    // icosahedron wireframe as the material's own `opacity`.
+    setPoseOpacity(matA.current, poseOpA.current.opacity * invMix);
+    setPoseOpacity(matB.current, poseOpB.current.opacity * invMix);
     if (halftoneMat.current) halftoneMat.current.uniforms.uOpacity.value = mix;
 
     // Publish the breathe amplitude + phase to the shared uniforms (robot only),
@@ -591,23 +612,25 @@ function ShapeMeshes({
         {style.renderAs === "lines" ? (
           <>
             <lineSegments geometry={geometry} rotation={poseA}>
-              <lineBasicMaterial
+              <shaderMaterial
                 ref={matA}
                 transparent
-                opacity={1}
                 depthWrite={false}
                 blending={blending}
-                color={style.colorA}
+                uniforms={lineUniformsA}
+                vertexShader={LINE_VERTEX}
+                fragmentShader={LINE_FRAGMENT}
               />
             </lineSegments>
             <lineSegments geometry={geometry} rotation={poseB}>
-              <lineBasicMaterial
+              <shaderMaterial
                 ref={matB}
                 transparent
-                opacity={0}
                 depthWrite={false}
                 blending={blending}
-                color={style.colorB}
+                uniforms={lineUniformsB}
+                vertexShader={LINE_VERTEX}
+                fragmentShader={LINE_FRAGMENT}
               />
             </lineSegments>
           </>
