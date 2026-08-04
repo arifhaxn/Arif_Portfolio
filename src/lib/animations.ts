@@ -19,8 +19,10 @@ import {
   ACHIEVE,
   DURATION,
   EASE,
+  GALLERY,
   OPACITY,
   PIXEL_REVEAL,
+  PIXEL_SCRUB,
   PROJECT_TITLE,
   SCRAMBLE,
   SCRUB,
@@ -212,6 +214,107 @@ export function projectTitleReveal(
       onComplete: () => gsap.set(el, { clearProps: "transform" }),
     });
   });
+  return tl;
+}
+
+// -----------------------------------------------------------------------------
+// Scroll-scrubbed pixelated hero window (case-study detail page)
+// -----------------------------------------------------------------------------
+
+/**
+ * Pin a fixed-size image window at viewport center and scrub a pixelated cover
+ * over it: a grid of opaque cells clears (fade + shrink) as the window scrolls to
+ * center, then re-covers as it scrolls past — a tent of the pinned scroll
+ * progress (0 covered → 0.5 fully clear → 1 covered), so it responds instantly
+ * and reversibly in BOTH scroll directions.
+ *
+ * Directional bias falls out of a row-based clear threshold: as clarity rises the
+ * top rows clear first (top→bottom); as it falls the bottom rows re-cover first
+ * (bottom→top). A random per-cell jitter around that sweep line keeps it organic.
+ * Shares the PixelReveal dissolve read (opacity→0 + scale-down), but driven by a
+ * progress value instead of time.
+ *
+ * Reduced motion: cells are set fully clear (image static, no pin) and null is
+ * returned. Desktop/mobile gating is the caller's job (wrap in matchMedia).
+ */
+export function pixelScrubReveal(opts: {
+  windowEl: HTMLElement;
+  cells: HTMLElement[];
+  cols: number;
+  rows: number;
+}): ScrollTrigger | null {
+  const { windowEl, cells, cols, rows } = opts;
+  if (prefersReducedMotion()) {
+    gsap.set(cells, { opacity: 0 });
+    return null;
+  }
+
+  const { band, jitter, cellScale } = PIXEL_SCRUB;
+  // Per-cell clear threshold: normalized row position (top→bottom) kept within
+  // [0, 1-band] plus a random jitter, so clarity=1 fully clears and =0 fully
+  // covers while the sweep line stays ragged.
+  const span = Math.max(0, 1 - band - jitter);
+  const thresholds = cells.map((_, i) => {
+    const rowFrac = rows > 1 ? Math.floor(i / cols) / (rows - 1) : 0;
+    return rowFrac * span + Math.random() * jitter;
+  });
+
+  const setClarity = (c: number) => {
+    for (let i = 0; i < cells.length; i++) {
+      let r = (c - thresholds[i]) / band; // 0 covered → 1 cleared
+      r = r < 0 ? 0 : r > 1 ? 1 : r;
+      r = r * r * (3 - 2 * r); // smoothstep
+      const cell = cells[i];
+      cell.style.opacity = String(1 - r);
+      cell.style.transform = `scale(${1 - (1 - cellScale) * r})`;
+    }
+  };
+  setClarity(0); // start fully covered
+
+  return ScrollTrigger.create({
+    trigger: windowEl,
+    start: "center center", // pin once the window reaches viewport center
+    end: PIXEL_SCRUB.runway,
+    pin: windowEl,
+    scrub: true,
+    onUpdate: (self) => setClarity(1 - Math.abs(2 * self.progress - 1)),
+  });
+}
+
+// -----------------------------------------------------------------------------
+// Gallery image zoom-in (case-study detail page)
+// -----------------------------------------------------------------------------
+
+/**
+ * Reveal a gallery figure as it scrolls into view: the image grows from a slight
+ * scale-down to rest (zoom toward rest, not away) while fading in, then its
+ * caption fades up once the zoom settles. One-shot (play once, no reverse).
+ * Expects `[data-gallery-img]` and (optionally) `[data-gallery-cap]` inside.
+ *
+ * Reduced motion: everything is placed at rest instantly (no zoom).
+ */
+export function galleryZoomIn(figure: HTMLElement, start: string = START.gallery) {
+  const img = figure.querySelector<HTMLElement>("[data-gallery-img]");
+  const cap = figure.querySelector<HTMLElement>("[data-gallery-cap]");
+  const targets = [img, cap].filter(Boolean) as HTMLElement[];
+  if (prefersReducedMotion()) return gsap.set(targets, { opacity: 1, scale: 1, y: 0 });
+
+  const tl = gsap.timeline({
+    scrollTrigger: { trigger: figure, start, toggleActions: "play none none none" },
+  });
+  if (img)
+    tl.fromTo(
+      img,
+      { opacity: 0, scale: GALLERY.scaleFrom },
+      { opacity: 1, scale: 1, duration: GALLERY.duration, ease: GALLERY.ease },
+    );
+  if (cap)
+    tl.fromTo(
+      cap,
+      { opacity: 0, y: 8 },
+      { opacity: 1, y: 0, duration: GALLERY.capDuration, ease: EASE.reveal },
+      ">-0.15", // begin as the zoom settles
+    );
   return tl;
 }
 

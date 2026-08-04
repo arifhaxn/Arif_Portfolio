@@ -23,6 +23,10 @@ export type Project = {
   accent?: string;
   /** Optional real screenshot path (public/...) — shown cover-cropped. */
   image?: string;
+  /** Case-study hero image (public/...) — the scroll-scrubbed pixelated window. */
+  heroImage?: string;
+  /** Case-study gallery: stacked screenshots, each with a caption. */
+  gallery?: { src: string; caption: string }[];
 };
 
 export const PROJECTS: Project[] = [
@@ -35,6 +39,12 @@ export const PROJECTS: Project[] = [
     repo: "https://github.com/arifhaxn/lead_unity",
     logo: "/projects/leadunity.png",
     accent: "#22b14c",
+    heroImage: "/projects/lead-unity/hero.png",
+    gallery: [
+      { src: "/projects/lead-unity/role-select.png", caption: "Role selection" },
+      { src: "/projects/lead-unity/dashboard.png", caption: "Student dashboard" },
+      { src: "/projects/lead-unity/admin-panel.png", caption: "Admin — scoring configuration" },
+    ],
   },
   {
     num: "02",

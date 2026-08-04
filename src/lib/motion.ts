@@ -148,6 +148,36 @@ export const PROJECT_TITLE = {
   fontSmall: "1.125rem", // final persistent top-left header size
 } as const;
 
+/**
+ * Scroll-scrubbed pixelated hero window (see ProjectCaseStudy + `pixelScrubReveal`).
+ * A fine grid of cells covers the case-study hero image; clarity is scrubbed to
+ * the pinned scroll progress as a tent (covered → clear at center → covered).
+ * `cols` sets the density (rows derived from the window aspect); `jitter` is the
+ * random per-cell offset around the top→bottom sweep line so it reads organic;
+ * `band` is the smoothing width over which a cell clears; `cellScale` is the
+ * shrink applied as a cell clears (dissolve read); `runway` is the pinned scroll
+ * distance (pin starts when the window centers).
+ */
+export const PIXEL_SCRUB = {
+  cols: 36,
+  jitter: 0.3,
+  band: 0.16,
+  cellScale: 0.4,
+  runway: "+=120%",
+} as const;
+
+/**
+ * Gallery zoom-in reveal (see ProjectCaseStudy + `galleryZoomIn`). Each image
+ * starts slightly smaller and grows to rest as it scrolls in (reads as zooming
+ * toward rest, not away), then its caption fades up once the zoom settles.
+ */
+export const GALLERY = {
+  scaleFrom: 0.9,
+  duration: 0.9,
+  ease: "power3.out",
+  capDuration: 0.4,
+} as const;
+
 export const SCRAMBLE = {
   duration: 0.6, // total scramble time per element
   sweep: 0.65, // fraction of the timeline the L→R lock sweep spans (0..1)
@@ -184,6 +214,7 @@ export const START = {
   overview: "top 85%", // Overview title/meta reveal
   photoStrip: "top 90%", // Photo strip reveal
   awardsRow: "top 55%", // Awards row activation
+  gallery: "top 82%", // Case-study gallery image zoom-in
 } as const;
 
 /** Opacity levels that recur across the spec. */

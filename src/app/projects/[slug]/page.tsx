@@ -12,6 +12,7 @@
 import { notFound } from "next/navigation";
 import { PROJECTS } from "@/lib/projects";
 import { ProjectTitleReveal } from "@/components/ProjectTitleReveal";
+import { ProjectCaseStudy } from "@/components/ProjectCaseStudy";
 
 export function generateStaticParams() {
   return PROJECTS.map((p) => ({ slug: p.slug }));
@@ -31,10 +32,8 @@ export default async function ProjectDetailPage({
       {/* Entry title → persistent top-left header. */}
       <ProjectTitleReveal name={project.name} />
 
-      {/* ── Phase 2 builds the case-study content here (pixel-reveal image +
-          metadata sections), below the relocated small header. Empty for now so
-          the entry sequence can be judged on its own. ── */}
-      <div className="min-h-screen" />
+      {/* Case-study body: pinned pixelated hero window, about info, gallery. */}
+      <ProjectCaseStudy project={project} />
     </main>
   );
 }

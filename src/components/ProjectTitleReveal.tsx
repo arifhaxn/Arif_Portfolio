@@ -39,9 +39,10 @@ const useIsoLayoutEffect =
 
 export type ProjectTitleRevealHandle = { play: () => void };
 
-// Shared display treatment (matches the Hero "Arif Hasan" name).
+// Shared display treatment — Anton (heavy condensed display face, single weight)
+// via the --font-anton next/font variable, in the reference's cream.
 const BASE_CLASS =
-  "pointer-events-none fixed z-40 m-0 font-semibold tracking-tight text-[#ece7df] will-change-transform";
+  "pointer-events-none fixed z-40 m-0 font-[family-name:var(--font-anton)] font-normal tracking-tight text-[#ece7df] will-change-transform";
 // Huge, centered.
 const BIG_CLASS = `${BASE_CLASS} left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 max-w-[92vw] text-center leading-[0.95]`;
 // Small, fixed top-left (below the navbar), one line.
