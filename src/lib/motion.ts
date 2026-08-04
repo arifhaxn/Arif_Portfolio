@@ -150,20 +150,24 @@ export const PROJECT_TITLE = {
 
 /**
  * Scroll-scrubbed pixelated hero window (see ProjectCaseStudy + `pixelScrubReveal`).
- * A fine grid of cells covers the case-study hero image; clarity is scrubbed to
- * the pinned scroll progress as a tent (covered → clear at center → covered).
- * `cols` sets the density (rows derived from the window aspect); `jitter` is the
- * random per-cell offset around the top→bottom sweep line so it reads organic;
- * `band` is the smoothing width over which a cell clears; `cellScale` is the
- * shrink applied as a cell clears (dissolve read); `runway` is the pinned scroll
- * distance (pin starts when the window centers).
+ * A fine grid of cells covers the case-study hero image. A CLEAR BAND is scrubbed
+ * through the window with pinned scroll progress: top→bottom as you scroll down,
+ * bottom→top as you scroll up (fully covered at both ends). Only the band clears,
+ * so the banner stays mostly hidden behind pixels and only partially peeks through.
+ * `cols` sets the density (rows derived from the window aspect); `band` is the
+ * clear band's half-height (fraction of the window); `jitter` is the random
+ * per-cell offset so the band edge reads organic; `cellScale` is the shrink as a
+ * cell clears (dissolve read); `coverScale` (>1) overlaps covered cells so the
+ * cover is seamless (no grid gaps showing the image); `runway` is the pinned
+ * scroll distance (pin starts when the window centers).
  */
 export const PIXEL_SCRUB = {
   cols: 36,
-  jitter: 0.3,
-  band: 0.16,
+  band: 0.18,
+  jitter: 0.14,
   cellScale: 0.4,
-  runway: "+=120%",
+  coverScale: 1.06,
+  runway: "+=90%",
 } as const;
 
 /**
@@ -172,10 +176,23 @@ export const PIXEL_SCRUB = {
  * toward rest, not away), then its caption fades up once the zoom settles.
  */
 export const GALLERY = {
-  scaleFrom: 0.9,
+  scaleFrom: 0.85,
   duration: 0.9,
   ease: "power3.out",
   capDuration: 0.4,
+} as const;
+
+/**
+ * Next-project chain (see NextProjectChain). After the gallery, a spacer of
+ * `runway` gives scroll room "past the end"; scrolling through it fills a ~ringSize
+ * ring (0→100) that follows the cursor (fixed bottom-center on touch). At 100 it
+ * chains into the next project; scrolling back up reverses and cancels.
+ */
+export const NEXT_PROJECT = {
+  runway: "85vh", // spacer scroll distance beyond the content's end
+  ringSize: 96, // ring diameter (px)
+  ringStroke: 3, // ring stroke width (px)
+  fadeIn: 0.12, // progress at which the indicator reaches full opacity
 } as const;
 
 export const SCRAMBLE = {

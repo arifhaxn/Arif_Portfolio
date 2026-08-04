@@ -32,6 +32,7 @@ import {
   prefersReducedMotion,
 } from "@/lib/animations";
 import { PIXEL_REVEAL } from "@/lib/motion";
+import { consumePixelRevealSkip } from "@/lib/revealControl";
 
 // Layout effect on the client (before paint), plain effect on the server (no-op)
 // to avoid the SSR useLayoutEffect warning.
@@ -105,6 +106,14 @@ export function PixelReveal() {
       return () => {
         t.kill();
       };
+    }
+
+    // Seamless chain (next-project ring): skip the cover entirely for this one
+    // navigation so the ring-fill + title reveal isn't layered under a second
+    // transition. Keep the overlay hidden.
+    if (consumePixelRevealSkip()) {
+      gsap.set(el, { opacity: 0, pointerEvents: "none" });
+      return;
     }
 
     // Route change: snap back to fully covered before paint, then dissolve once

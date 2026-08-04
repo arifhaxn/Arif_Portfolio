@@ -223,16 +223,17 @@ export function projectTitleReveal(
 
 /**
  * Pin a fixed-size image window at viewport center and scrub a pixelated cover
- * over it: a grid of opaque cells clears (fade + shrink) as the window scrolls to
- * center, then re-covers as it scrolls past — a tent of the pinned scroll
- * progress (0 covered → 0.5 fully clear → 1 covered), so it responds instantly
- * and reversibly in BOTH scroll directions.
+ * over it. A CLEAR BAND is swept through the grid by the pinned scroll progress:
+ * as you scroll DOWN the band travels top→bottom; scrolling UP reverses it
+ * bottom→top. It starts and ends fully covered (band parked just off each edge),
+ * and only cells within the band clear — so the banner stays mostly hidden behind
+ * the pixels and only partially peeks through the moving band. Scrubbed, so it
+ * responds instantly and reversibly to scroll.
  *
- * Directional bias falls out of a row-based clear threshold: as clarity rises the
- * top rows clear first (top→bottom); as it falls the bottom rows re-cover first
- * (bottom→top). A random per-cell jitter around that sweep line keeps it organic.
- * Shares the PixelReveal dissolve read (opacity→0 + scale-down), but driven by a
- * progress value instead of time.
+ * Each cell's vertical position gets a random jitter so the band edge is ragged
+ * (organic, not a straight bar). Covered cells scale slightly >1 (coverScale) so
+ * they overlap into a seamless cover — no sub-pixel grid gaps leak the image, so
+ * off-center there's no visible "box" (cells are page-black on a black page).
  *
  * Reduced motion: cells are set fully clear (image static, no pin) and null is
  * returned. Desktop/mobile gating is the caller's job (wrap in matchMedia).
@@ -249,27 +250,28 @@ export function pixelScrubReveal(opts: {
     return null;
   }
 
-  const { band, jitter, cellScale } = PIXEL_SCRUB;
-  // Per-cell clear threshold: normalized row position (top→bottom) kept within
-  // [0, 1-band] plus a random jitter, so clarity=1 fully clears and =0 fully
-  // covers while the sweep line stays ragged.
-  const span = Math.max(0, 1 - band - jitter);
-  const thresholds = cells.map((_, i) => {
+  const { band, jitter, cellScale, coverScale } = PIXEL_SCRUB;
+  // Per-cell vertical position (0 top → 1 bottom) + random jitter → ragged band.
+  const pos = cells.map((_, i) => {
     const rowFrac = rows > 1 ? Math.floor(i / cols) / (rows - 1) : 0;
-    return rowFrac * span + Math.random() * jitter;
+    return rowFrac + (Math.random() - 0.5) * jitter;
   });
 
-  const setClarity = (c: number) => {
+  // `line` is the clear band's center; cells within `band` of it clear.
+  const setBand = (line: number) => {
     for (let i = 0; i < cells.length; i++) {
-      let r = (c - thresholds[i]) / band; // 0 covered → 1 cleared
+      let r = 1 - Math.abs(pos[i] - line) / band; // 1 at the line → 0 covered
       r = r < 0 ? 0 : r > 1 ? 1 : r;
       r = r * r * (3 - 2 * r); // smoothstep
       const cell = cells[i];
       cell.style.opacity = String(1 - r);
-      cell.style.transform = `scale(${1 - (1 - cellScale) * r})`;
+      cell.style.transform = `scale(${coverScale - (coverScale - cellScale) * r})`;
     }
   };
-  setClarity(0); // start fully covered
+  // Map progress 0→1 to the band travelling from just-above-top to just-below-
+  // bottom, so both ends of the pin are fully covered.
+  const lineAt = (p: number) => -band + p * (1 + 2 * band);
+  setBand(lineAt(0)); // start fully covered
 
   return ScrollTrigger.create({
     trigger: windowEl,
@@ -277,7 +279,7 @@ export function pixelScrubReveal(opts: {
     end: PIXEL_SCRUB.runway,
     pin: windowEl,
     scrub: true,
-    onUpdate: (self) => setClarity(1 - Math.abs(2 * self.progress - 1)),
+    onUpdate: (self) => setBand(lineAt(self.progress)),
   });
 }
 

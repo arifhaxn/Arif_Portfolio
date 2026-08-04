@@ -21,12 +21,20 @@ export type Project = {
   logo?: string;
   /** Dominant logo color (hex) — tints the card's glow + matrix pixel effect. */
   accent?: string;
+  /** Hex color for this project's next-project loading ring (cosmetic). */
+  themeColor?: string;
   /** Optional real screenshot path (public/...) — shown cover-cropped. */
   image?: string;
   /** Case-study hero image (public/...) — the scroll-scrubbed pixelated window. */
   heroImage?: string;
   /** Case-study gallery: stacked screenshots, each with a caption. */
   gallery?: { src: string; caption: string }[];
+  /** Overview "Role" line. */
+  role?: string;
+  /** Overview "Year" line. */
+  year?: string;
+  /** Optional live/demo URL — the overview link points here when set (else repo). */
+  liveUrl?: string;
 };
 
 export const PROJECTS: Project[] = [
@@ -39,7 +47,10 @@ export const PROJECTS: Project[] = [
     repo: "https://github.com/arifhaxn/lead_unity",
     logo: "/projects/leadunity.png",
     accent: "#22b14c",
+    themeColor: "#22c55e",
     heroImage: "/projects/lead-unity/hero.png",
+    role: "Design & Development",
+    year: "2024", // ⚠ placeholder year — confirm/replace
     gallery: [
       { src: "/projects/lead-unity/role-select.png", caption: "Role selection" },
       { src: "/projects/lead-unity/dashboard.png", caption: "Student dashboard" },
@@ -55,6 +66,7 @@ export const PROJECTS: Project[] = [
     repo: "https://github.com/arifhaxn/one_pick",
     logo: "/projects/onepick.png",
     accent: "#f0a91c",
+    themeColor: "#f0a91c",
   },
   {
     num: "03",
@@ -65,6 +77,7 @@ export const PROJECTS: Project[] = [
     repo: "https://github.com/arifhaxn/chessy",
     logo: "/projects/chessy.png",
     accent: "#e3d2a8",
+    themeColor: "#e0b23c",
   },
   {
     num: "04",
@@ -75,6 +88,7 @@ export const PROJECTS: Project[] = [
     repo: "https://github.com/arifhaxn/Claster",
     logo: "/projects/claster.png",
     accent: "#f05a28",
+    themeColor: "#f0562a",
   },
   {
     num: "05",
@@ -85,6 +99,7 @@ export const PROJECTS: Project[] = [
     repo: "https://github.com/arifhaxn/OneTELE---Liilab-Teleprompter",
     logo: "/projects/onetele.png",
     accent: "#6d28d9",
+    themeColor: "#8b5cf6",
   },
   {
     num: "06",
@@ -95,5 +110,12 @@ export const PROJECTS: Project[] = [
     repo: "https://github.com/arifhaxn/CareerLogic-AI",
     logo: "/projects/careerlogic.png",
     accent: "#4f5aa8",
+    themeColor: "#5b6cc4",
   },
 ];
+
+/** The next project in sequence, looping back to the first after the last. */
+export function nextProject(slug: string): Project {
+  const i = PROJECTS.findIndex((p) => p.slug === slug);
+  return PROJECTS[(i + 1) % PROJECTS.length];
+}
