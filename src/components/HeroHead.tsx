@@ -119,8 +119,10 @@ const HALFTONE_FRAGMENT = /* glsl */ `
 // style mix, so the field fades in/out with the halftone. Constant screen-size
 // squares = pixelated look.
 // -----------------------------------------------------------------------------
-const PARTICLE_COLS = 46;
-const PARTICLE_ROWS = 28;
+// Reduced from 46×28 → ~40% of the original floating-pixel count, applied to
+// every HeroHead field (landing robot, About robot, Projects icosahedron).
+const PARTICLE_COLS = 29;
+const PARTICLE_ROWS = 18;
 const PARTICLE_W = 15; // world-unit spread — overfills even a full-viewport wide canvas
 const PARTICLE_H = 9;
 

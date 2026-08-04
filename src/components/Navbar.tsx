@@ -24,11 +24,16 @@ import { ScrambleText } from "@/components/ScrambleText";
 // form: from any route a native <Link> navigates HOME and then scrolls to the
 // anchor (Next.js handles both in one client transition). "Achievements" is now
 // its own real route.
-const LINKS = [
-  { label: "Projects", href: "/projects" },
-  { label: "About", href: "/about" },
-  { label: "Achievements", href: "/achievements" },
+//
+// Layout: left corner [Contact, About] · centered AH mark · right corner
+// [Projects, Achievements].
+const LEFT_LINKS = [
   { label: "Contact", href: "/about#contact" },
+  { label: "About", href: "/about" },
+];
+const RIGHT_LINKS = [
+  { label: "Projects", href: "/projects" },
+  { label: "Achievements", href: "/achievements" },
 ];
 
 export function Navbar() {
@@ -51,18 +56,34 @@ export function Navbar() {
       // between the links and read as stray diagonal lines across the nav.
       className="fixed inset-x-0 top-0 z-50 flex items-center justify-between bg-black/70 px-6 py-5 backdrop-blur-md sm:px-10"
     >
-      {/* Logo mark — text initials, first item in the stagger */}
+      {/* Left corner — Contact, About */}
+      <nav className="flex items-center gap-6 sm:gap-8">
+        {LEFT_LINKS.map((link) => (
+          <Link
+            key={link.href}
+            data-nav-item
+            href={link.href}
+            className="text-xs font-medium uppercase tracking-[0.15em] text-zinc-400 transition-colors hover:text-white sm:text-sm"
+          >
+            {/* Entrance driven by navIntro (data-nav-item); hover replays. */}
+            <ScrambleText>{link.label}</ScrambleText>
+          </Link>
+        ))}
+      </nav>
+
+      {/* Middle — logo mark, absolutely centered so unequal side widths don't
+          push it off-center */}
       <Link
         data-nav-item
         href="/"
-        className="text-sm font-semibold tracking-[0.2em] text-white"
+        className="absolute left-1/2 -translate-x-1/2 text-sm font-semibold tracking-[0.2em] text-white"
       >
         AH
       </Link>
 
-      {/* Nav links — each its own stagger step */}
+      {/* Right corner — Projects, Achievements */}
       <nav className="flex items-center gap-6 sm:gap-8">
-        {LINKS.map((link) => (
+        {RIGHT_LINKS.map((link) => (
           <Link
             key={link.href}
             data-nav-item

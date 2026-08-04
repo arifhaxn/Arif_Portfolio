@@ -133,6 +133,21 @@ export const PIXEL_REVEAL = {
   swapDelay: 0.08, // wait after a route commit before dissolving
 } as const;
 
+/**
+ * Project case-study entry title (see ProjectTitleReveal + `projectTitleReveal`).
+ * On arriving at /projects/[slug] the project's name appears HUGE and centered,
+ * holds for a beat, then transforms (GSAP Flip, position + scale) into a small,
+ * fixed top-left header label that persists for the rest of the page. `fontBig`
+ * / `fontSmall` are the two font sizes the shared element morphs between.
+ */
+export const PROJECT_TITLE = {
+  hold: 1.8, // s — big centered title holds before shrinking (tune by feel)
+  flipDuration: 0.9, // s — big → small shared-element transform
+  flipEase: "power4.inOut",
+  fontBig: "clamp(3.25rem, 14vw, 12rem)", // huge centered moment
+  fontSmall: "1.125rem", // final persistent top-left header size
+} as const;
+
 export const SCRAMBLE = {
   duration: 0.6, // total scramble time per element
   sweep: 0.65, // fraction of the timeline the L→R lock sweep spans (0..1)

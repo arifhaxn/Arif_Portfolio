@@ -148,20 +148,19 @@ export default function AboutPage() {
           </ScrambleText>
           <div className="grid gap-x-12 gap-y-16 sm:grid-cols-2">
             {SKILLS.map((cat, i) => (
-              <div key={cat.label} data-skill className="flex flex-col gap-2">
-                <p className="font-mono text-xs uppercase tracking-[0.2em] text-zinc-500">
-                  {String(i + 1).padStart(2, "0")} —
-                </p>
+              <div key={cat.label} data-skill className="flex flex-col gap-3">
+                {/* Small eyebrow — index + category name (the former big title). */}
+                <h3 className="font-mono text-xs uppercase tracking-[0.2em] text-zinc-500">
+                  {String(i + 1).padStart(2, "0")} — {cat.label}
+                </h3>
+                {/* Skills are now the prominent text. */}
                 <ScrambleText
-                  as="h3"
+                  as="p"
                   entrance="observer"
-                  className="text-4xl font-semibold tracking-tight sm:text-5xl"
+                  className="text-3xl font-semibold tracking-tight sm:text-4xl"
                 >
-                  {cat.label}
-                </ScrambleText>
-                <p className="font-mono text-sm text-zinc-500">
                   {cat.items.join(" · ")}
-                </p>
+                </ScrambleText>
               </div>
             ))}
           </div>

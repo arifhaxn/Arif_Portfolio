@@ -14,13 +14,14 @@
 //     state instantly instead of animating.
 // -----------------------------------------------------------------------------
 
-import { gsap, ScrollTrigger, Observer } from "@/lib/gsap";
+import { gsap, ScrollTrigger, Observer, Flip } from "@/lib/gsap";
 import {
   ACHIEVE,
   DURATION,
   EASE,
   OPACITY,
   PIXEL_REVEAL,
+  PROJECT_TITLE,
   SCRAMBLE,
   SCRUB,
   STAGGER,
@@ -161,6 +162,57 @@ export function pixelRevealOut(cells: Target, cols: number, onComplete?: () => v
 /** Snap every cover cell back to fully covering (opaque, full size), no tween. */
 export function pixelRevealCoverInstant(cells: Target) {
   gsap.set(cells, { opacity: 1, scale: 1 });
+}
+
+// -----------------------------------------------------------------------------
+// Project case-study entry title (huge-centered → shrink to top-left header)
+// -----------------------------------------------------------------------------
+
+/**
+ * Play the project title's entry moment: hold the name HUGE and centered for a
+ * beat, then morph the SAME element (position + scale, via GSAP Flip) into its
+ * small top-left header slot. The caller owns the two visual states — `applySmall`
+ * is invoked at the transform boundary to switch the element's classes/styles
+ * from the big layout to the small header layout; Flip captures the "before" and
+ * animates the box change so it reads as one element transforming, not a crossfade.
+ *
+ * Reduced motion (or `hold: false`): skip the big-centered beat entirely and drop
+ * straight into the small header — the label still ends in its final position.
+ *
+ * Returns the timeline so callers can await/kill it; re-usable imperatively when
+ * chaining projects (Phase 3) as well as on route mount.
+ */
+export function projectTitleReveal(
+  el: HTMLElement,
+  applySmall: () => void,
+  opts: { hold?: boolean } = {},
+): gsap.core.Timeline {
+  if (prefersReducedMotion() || opts.hold === false) {
+    applySmall();
+    return gsap.timeline();
+  }
+
+  // A real value-tween on a dummy object gives the timeline a genuine `hold`-long
+  // duration (an empty/property-less tween can collapse to 0, which is what made
+  // it snap). After the hold, Flip records the big box, we swap to the small
+  // header layout, and Flip animates the SAME element from big → small over a
+  // real, eased duration — scale bridges the font-size change via transform, so
+  // position and size ease together rather than cutting.
+  const tl = gsap.timeline();
+  tl.to({ v: 0 }, { v: 1, duration: PROJECT_TITLE.hold, ease: "none" });
+  tl.add(() => {
+    const state = Flip.getState(el);
+    applySmall();
+    Flip.from(state, {
+      duration: PROJECT_TITLE.flipDuration,
+      ease: PROJECT_TITLE.flipEase,
+      scale: true,
+      // Land exactly on the small header's natural CSS position (no leftover
+      // transform from the scale bridge).
+      onComplete: () => gsap.set(el, { clearProps: "transform" }),
+    });
+  });
+  return tl;
 }
 
 // -----------------------------------------------------------------------------

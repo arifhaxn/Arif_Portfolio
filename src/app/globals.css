@@ -22,5 +22,94 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Use the configured next/font display face (Geist) — set via --font-geist-sans
+     on <html>. Without this the create-next-app leftover (`Arial`) overrode it
+     for the whole body, so every heading (the Hero name included) fell back to a
+     generic sans. Mirrors the `--font-sans` theme token. */
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Project thumbnail card visuals (ThumbnailCard). Each card sets its own
+   --accent (the app-logo's dominant color) inline; every layer below tints
+   itself from that variable. Ambient animations switch off under reduced motion. */
+@keyframes thumbFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+@keyframes thumbGlow {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+/* A short pulse (the dash) rides along a pathLength-normalized (=1) trace; one
+   full offset shift loops it seamlessly. Per-trace duration/delay set inline. */
+@keyframes circuitFlow {
+  to {
+    stroke-dashoffset: -1;
+  }
+}
+/* Junction pads that softly blink. */
+@keyframes circuitNode {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.thumb-float {
+  animation: thumbFloat 6s ease-in-out infinite;
+}
+
+.circuit-flow {
+  stroke-dasharray: 0.14 0.86;
+  stroke-dashoffset: 0;
+  animation: circuitFlow linear infinite;
+}
+.circuit-node {
+  animation: circuitNode ease-in-out infinite;
+}
+
+/* Breathing spotlight tinted to the logo color. */
+.thumb-glow {
+  background: radial-gradient(
+    circle at center,
+    color-mix(in srgb, var(--accent, #3b82f6) 34%, transparent),
+    transparent 62%
+  );
+  animation: thumbGlow 5s ease-in-out infinite;
+}
+
+/* Brighter accent spotlight, faded in on hover (opacity handled in the markup). */
+.thumb-glow-strong {
+  background: radial-gradient(
+    circle at center,
+    color-mix(in srgb, var(--accent, #3b82f6) 50%, transparent),
+    transparent 58%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thumb-float,
+  .thumb-glow,
+  .circuit-node {
+    animation: none;
+  }
+  /* Drop the travelling pulses entirely; the static traces remain. */
+  .circuit-flow {
+    animation: none;
+    display: none;
+  }
 }
