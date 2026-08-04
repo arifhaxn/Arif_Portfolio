@@ -39,6 +39,7 @@ import {
   BufferAttribute,
   BufferGeometry,
   EdgesGeometry,
+  FrontSide,
   IcosahedronGeometry,
   MathUtils,
   Mesh,
@@ -101,10 +102,12 @@ const HALFTONE_FRAGMENT = /* glsl */ `
     vec2 cell = mod(gl_FragCoord.xy, uDotSize) / uDotSize - 0.5;
     float dist = length(cell) * 2.0;
     float coverage = 1.0 - smoothstep(radius - 0.08, radius + 0.08, dist);
-    coverage *= smoothstep(0.03, 0.12, radius); // kill sub-threshold dots entirely
-    float a = coverage * uOpacity;
-    if (a < 0.01) discard;
-    gl_FragColor = vec4(vec3(1.0), a);
+    coverage *= smoothstep(0.03, 0.12, radius);
+    // Opaque form: dots are white, gaps are flat BLACK (not discarded), so nothing
+    // behind the front surface bleeds through the negative space between dots. The
+    // whole mesh fades via uOpacity for the style crossfade; depthWrite (on the
+    // material) makes the nearest front surface self-occlude everything deeper.
+    gl_FragColor = vec4(vec3(coverage), uOpacity);
   }
 `;
 
@@ -443,12 +446,17 @@ function ShapeMeshes({
 
       <group ref={group}>
       <Center scale={scale * zoom}>
-        {/* --- Style B: halftone dot-matrix over the solid mesh --- */}
-        <mesh geometry={solidGeometry} rotation={poseA}>
+        {/* --- Style B: halftone dot-matrix over the solid mesh. Opaque black
+            gaps + depthWrite so only the nearest FrontSide surface shows (no
+            back/interior bleed-through); renderOrder 2 draws it after Style A so
+            the wireframe below isn't depth-occluded during the crossfade. --- */}
+        <mesh geometry={solidGeometry} rotation={poseA} renderOrder={2}>
           <shaderMaterial
             ref={halftoneMat}
             transparent
-            depthWrite={false}
+            depthWrite
+            depthTest
+            side={FrontSide}
             uniforms={halftoneUniforms}
             vertexShader={HALFTONE_VERTEX}
             fragmentShader={HALFTONE_FRAGMENT}
