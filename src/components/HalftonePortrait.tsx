@@ -38,8 +38,11 @@ const CONTRAST = 1.4; // grayscale contrast multiplier
 const USM_RADIUS = 2; // unsharp-mask blur radius (px)
 const USM_AMOUNT = 1.8; // unsharp-mask amount (180%)
 const USM_THRESHOLD = 2; // unsharp-mask threshold (0–255 luma delta)
-const DOT_GAMMA = 1.85; // luminance→radius falloff exponent
-const DOT_FACTOR = 0.92; // radius scale within the cell
+// Brightness tune (overrides the original 1.85 / 0.92): a lower gamma grows the
+// mid-tone dots so the face reads bright like the reference instead of dim; 1.0
+// factor lets highlight dots just touch (fills the cell) without merging.
+const DOT_GAMMA = 1.3; // luminance→radius falloff exponent (lower = brighter mids)
+const DOT_FACTOR = 1.0; // radius scale within the cell
 const MIN_RADIUS = 0.5; // drop dots below this radius at the reference scale
 const REF_SCALE = 4; // the tuned reference output scale (dot-set + max render res)
 
