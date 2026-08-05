@@ -82,10 +82,17 @@ export default function AboutPage() {
           </h1>
         </div>
 
-        {/* Scroll cue + coding-since. */}
-        <span className="pointer-events-none absolute bottom-8 left-1/2 -translate-x-1/2 font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">
-          Scroll ↓
-        </span>
+        {/* Scroll cue — animated sliding segment (same motion as the projects
+            section's case-study cue). Sits above the portrait (z-20). */}
+        <div className="pointer-events-none absolute bottom-8 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-3 text-blue-400">
+          <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">
+            Scroll
+          </span>
+          <span className="relative block h-12 w-px overflow-hidden">
+            <span className="absolute inset-0 bg-current opacity-20" />
+            <span className="scroll-cue-line absolute left-0 top-0 h-1/2 w-full bg-current" />
+          </span>
+        </div>
         <div className="absolute bottom-10 right-6 sm:right-10">
           <CodingSince />
         </div>

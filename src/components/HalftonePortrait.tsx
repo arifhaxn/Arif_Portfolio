@@ -402,10 +402,11 @@ export function HalftonePortrait() {
           ref={canvasRef}
           className="block h-full w-full"
           // Fade the lower portion to transparent so the shoulders blend into the
-          // page's black instead of ending on a hard edge.
+          // page's black — and clear the bottom zone where the scroll cue sits, so
+          // the cue never overlaps visible dots.
           style={{
-            maskImage: "linear-gradient(to bottom, #000 58%, transparent 96%)",
-            WebkitMaskImage: "linear-gradient(to bottom, #000 58%, transparent 96%)",
+            maskImage: "linear-gradient(to bottom, #000 58%, transparent 82%)",
+            WebkitMaskImage: "linear-gradient(to bottom, #000 58%, transparent 82%)",
           }}
         />
       )}
