@@ -135,7 +135,7 @@ export function Hero() {
         onClick={goContact}
         data-hero-line
         aria-label="Contact me"
-        className="group absolute bottom-12 right-6 z-10 rounded-2xl bg-white px-6 py-3 text-lg font-semibold text-black shadow-lg shadow-black/30 ring-1 ring-black/5 transition-[transform,background-color,color,box-shadow] duration-300 ease-out hover:scale-[1.05] hover:bg-black hover:text-white hover:ring-white/15 sm:right-10"
+        className="group absolute bottom-12 right-6 z-10 rounded-2xl bg-white px-6 py-3.5 text-sm font-semibold uppercase tracking-[0.2em] text-black shadow-lg shadow-black/30 ring-1 ring-black/5 transition-[transform,background-color,color,box-shadow] duration-300 ease-out hover:scale-[1.05] hover:bg-black hover:text-white hover:ring-white/15 sm:right-10"
       >
         Contact me
       </Link>
