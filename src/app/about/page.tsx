@@ -56,9 +56,13 @@ export default function AboutPage() {
   return (
     <main ref={root} className="bg-black text-white">
       {/* ============================ 1 · HERO ============================= */}
-      <section className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 pt-28 sm:px-10">
-        {/* Halftone-dot portrait (canvas, drawn once from the cutout PNG). */}
-        <HalftonePortrait />
+      <section className="relative min-h-screen overflow-hidden px-6 pt-28 sm:px-10">
+        {/* Halftone-dot portrait (canvas), centered in the viewport behind the
+            text — absolute inset-0 so the section's top padding doesn't push it
+            low. */}
+        <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
+          <HalftonePortrait />
+        </div>
 
         {/* Name (bottom-left, over the portrait), like the reference. */}
         <div className="pointer-events-none absolute bottom-24 left-6 text-left sm:bottom-28 sm:left-10">

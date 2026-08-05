@@ -17,11 +17,14 @@
 //      tuned 4× basis clears 0.5px (scale-invariant, so the dot SET matches the
 //      tuned look at any size); draw a solid white circle at the cell centre.
 //
-// CRISPNESS: the dots are drawn at the canvas's ACTUAL displayed resolution
-// (CSS size × devicePixelRatio, capped at the tuned 4× source), NOT a fixed 4×
-// buffer that the browser then downsamples — downsampling a fine dot field
-// shrinks + greys the dots (looked dim). Redraws on resize; the heavy per-pixel
-// pass runs once and is cached, only the cheap dot pass repeats.
+// BRIGHTNESS + CRISPNESS: the dots are drawn once into an offscreen buffer at the
+// tuned 4× scale (big, full-energy circles), then blitted into the display canvas
+// (sized to CSS × devicePixelRatio) with a high-quality downscale. Drawing tiny
+// circles directly at a small display scale made mid-tone dots sub-pixel, which
+// AA under-filled → the face read dim; rendering big then downsampling preserves
+// each dot's energy (matching the tuned source, which is itself a 4× view), while
+// the display-resolution target keeps it sharp (no browser CSS-downscale mush).
+// The heavy per-pixel pass AND the 4× dot buffer are cached; resize only re-blits.
 // -----------------------------------------------------------------------------
 
 import { useEffect, useRef, useState } from "react";
@@ -134,32 +137,46 @@ function processImage(img: HTMLImageElement): Cells {
   return { srcW, srcH, cols, rows, lum: cellLum, alpha: cellAlpha };
 }
 
-/** Cheap pass — draw the white dots into `canvas` at `scale` (output px / src px). */
-function drawDots(canvas: HTMLCanvasElement, cells: Cells, scale: number) {
+/** Render the white dots once into an offscreen buffer at the tuned 4× scale. */
+function renderDotBuffer(cells: Cells): HTMLCanvasElement {
   const { srcW, srcH, cols, rows, lum, alpha } = cells;
-  canvas.width = Math.max(1, Math.round(srcW * scale));
-  canvas.height = Math.max(1, Math.round(srcH * scale));
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const off = document.createElement("canvas");
+  off.width = srcW * REF_SCALE;
+  off.height = srcH * REF_SCALE;
+  const ctx = off.getContext("2d");
+  if (!ctx) return off;
   ctx.fillStyle = "#ffffff";
-  const drawMax = ((CELL * scale) / 2) * DOT_FACTOR; // radius at THIS scale
-  const refMax = ((CELL * REF_SCALE) / 2) * DOT_FACTOR; // radius at the tuned 4×
+  const maxRadius = ((CELL * REF_SCALE) / 2) * DOT_FACTOR; // 9.2px at luma=1
   const TAU = Math.PI * 2;
   for (let cy = 0; cy < rows; cy++) {
     for (let cx = 0; cx < cols; cx++) {
       const ci = cy * cols + cx;
       if (alpha[ci] < ALPHA_MIN) continue; // background / soft edge → no dot
-      const g = Math.pow(lum[ci], DOT_GAMMA);
-      if (g * refMax < MIN_RADIUS) continue; // scale-invariant cull (matches 4× tuning)
-      const radius = g * drawMax;
-      const ox = (cx * CELL + CELL / 2) * scale;
-      const oy = (cy * CELL + CELL / 2) * scale;
+      const radius = Math.pow(lum[ci], DOT_GAMMA) * maxRadius;
+      if (radius < MIN_RADIUS) continue; // shadows fall away to nothing
+      const ox = (cx * CELL + CELL / 2) * REF_SCALE;
+      const oy = (cy * CELL + CELL / 2) * REF_SCALE;
       ctx.beginPath();
       ctx.arc(ox, oy, radius, 0, TAU);
       ctx.fill();
     }
   }
+  return off;
+}
+
+/** Blit the 4× dot buffer into the display canvas at CSS × dpr (quality downscale). */
+function blit(canvas: HTMLCanvasElement, buffer: HTMLCanvasElement) {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth || buffer.width;
+  const cssH = canvas.clientHeight || buffer.height;
+  canvas.width = Math.max(1, Math.round(cssW * dpr));
+  canvas.height = Math.max(1, Math.round(cssH * dpr));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(buffer, 0, 0, canvas.width, canvas.height);
 }
 
 /**
@@ -176,26 +193,23 @@ export function HalftonePortrait() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     let cancelled = false;
-    let cells: Cells | null = null;
-    let lastScale = 0;
+    let buffer: HTMLCanvasElement | null = null;
+    let lastKey = "";
 
     const paint = () => {
-      if (!cells || cancelled) return;
+      if (!buffer || cancelled) return;
       const dpr = window.devicePixelRatio || 1;
-      const cssW = canvas.clientWidth || cells.srcW;
-      // Draw at the real displayed resolution (× dpr) so the browser never
-      // downsamples the dot field; never finer than the tuned 4× source.
-      const scale = Math.min((cssW * dpr) / cells.srcW, REF_SCALE);
-      if (Math.abs(scale - lastScale) < 0.01) return; // no meaningful change
-      lastScale = scale;
-      drawDots(canvas, cells, scale);
+      const key = `${canvas.clientWidth}x${canvas.clientHeight}@${dpr}`;
+      if (key === lastKey) return; // size unchanged → skip re-blit
+      lastKey = key;
+      blit(canvas, buffer);
     };
 
     const img = new Image();
     img.onload = () => {
       if (cancelled) return;
       try {
-        cells = processImage(img);
+        buffer = renderDotBuffer(processImage(img));
         paint();
       } catch {
         setFailed(true);
@@ -215,12 +229,12 @@ export function HalftonePortrait() {
   }, []);
 
   return (
-    // Sized LARGE and rendered at display resolution (see header): a tall,
-    // prominent portrait whose dots stay crisp + bright at any viewport.
+    // Tall, prominent portrait; the parent centers it in the hero. Dots stay
+    // crisp + bright at any size via the 4× buffer → quality downscale (header).
     <div
       data-hero-portrait
       aria-hidden
-      className="relative aspect-[471/530] h-[clamp(20rem,82vmin,48rem)]"
+      className="relative aspect-[471/530] h-[clamp(22rem,88vmin,52rem)]"
     >
       {failed ? (
         // Fallback: the original placeholder card, clearly flagged.
