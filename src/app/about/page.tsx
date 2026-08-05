@@ -130,7 +130,9 @@ export default function AboutPage() {
                 data-float
                 className="pointer-events-none absolute -left-6 top-10 h-3 w-3 rotate-45 border border-zinc-700"
               />
-              <HeroHead shape="robot" />
+              {/* Slow continuous Y-axis spin (rad/s); composes on top of mouse
+                  tilt + arm-breathe, and auto-disables under reduced motion. */}
+              <HeroHead shape="robot" spin={0.3} />
             </div>
           </div>
         </div>
