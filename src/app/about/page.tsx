@@ -58,8 +58,9 @@ export default function AboutPage() {
       <section className="relative min-h-screen overflow-hidden px-6 pt-28 sm:px-10">
         {/* Halftone-dot portrait (canvas), centered in the viewport behind the
             text — absolute inset-0 so the section's top padding doesn't push it
-            low. */}
-        <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
+            low. Nudged slightly right so it reads centered against the big
+            bottom-left nameplate. */}
+        <div className="pointer-events-none absolute inset-0 z-0 flex translate-x-[4vw] items-center justify-center">
           <HalftonePortrait />
         </div>
 
@@ -84,7 +85,7 @@ export default function AboutPage() {
 
         {/* Scroll cue — animated sliding segment (same motion as the projects
             section's case-study cue). Sits above the portrait (z-20). */}
-        <div className="pointer-events-none absolute bottom-8 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-3 text-blue-400">
+        <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-3 text-blue-400">
           <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">
             Scroll
           </span>
