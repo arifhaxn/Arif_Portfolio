@@ -143,6 +143,17 @@ function setPoseOpacity(m: MeshBasicMaterial | ShaderMaterial | null, v: number)
   else m.opacity = v;
 }
 
+/** Write the arm-breathe amplitude (radians) + normalized phase to a material that
+ *  carries the sway uniforms (the robot's crease-line and halftone shaders). No-op
+ *  for anything without them (the icosahedron wireframe has no arm uniforms). */
+function writeArmSway(m: MeshBasicMaterial | ShaderMaterial | null, amp: number, phase: number) {
+  if (!(m instanceof ShaderMaterial)) return;
+  const { uArmAmp, uArmPhase } = m.uniforms;
+  if (!uArmAmp || !uArmPhase) return;
+  uArmAmp.value = amp;
+  uArmPhase.value = phase;
+}
+
 // -----------------------------------------------------------------------------
 // Halftone (Style B) shader — screen-space dot-matrix of the LIT solid mesh.
 // Per fragment we shade the surface (Blinn-Phong: diffuse falloff + a specular
@@ -490,15 +501,16 @@ function ShapeMeshes({
   const reduce = useMemo(() => prefersReducedMotion(), []);
 
   // Arm-breathe (robot only). `armPhase` is looped 0→1 by the `armBreathe` GSAP
-  // tween. `armUniforms` are the shared sway inputs — the SAME objects are spread
-  // into the halftone shader AND both crease-line shaders, so a single per-frame
-  // write (via the halftone material ref, never the memoized object directly)
-  // swings all three in lockstep. uArmAmp stays 0 for the icosahedron / reduced
-  // motion, which no-ops the displacement (arms static).
+  // tween. `armUniforms` seeds the sway uniforms into each Style-A/B shader's
+  // uniforms object (halftone + both crease-line shaders) so the shaders declare
+  // and bind them; the per-frame values are then written to EACH material directly
+  // (see `writeArmSway`), so all three swing in lockstep without depending on the
+  // uniform objects staying shared by reference. uArmPhaseOffset (left-arm desync)
+  // is constant; uArmAmp is 0 for the icosahedron / reduced motion (arms static).
   const armPhase = useRef({ phase: 0 });
   const armUniforms = useMemo(
     () => ({
-      uArmPhase: { value: 0 }, // 0..1 breathe phase, published each frame
+      uArmPhase: { value: 0 }, // 0..1 breathe phase, written each frame
       uArmAmp: { value: 0 }, // peak sway radians; 0 = disabled (poly / reduced)
       uArmPhaseOffset: { value: ARM_BREATHE.phaseOffset }, // left-arm desync
     }),
@@ -520,13 +532,13 @@ function ShapeMeshes({
       uOpacity: { value: 0 },
       uDotSize: { value: 8 }, // device px per dot cell
       uLightDir: { value: new Vector3(0.2, 0.85, 0.45) }, // view-space, TOP-front
-      ...armUniforms, // shared sway inputs (also spread into the line shaders)
+      ...armUniforms, // seed sway uniforms so the halftone shader binds them
     }),
     [armUniforms],
   );
 
-  // Style A crease-line uniforms (robot). Own color + pose-crossfade opacity, but
-  // the SAME arm-sway uniform objects as the halftone (spread by reference).
+  // Style A crease-line uniforms (robot). Own color + pose-crossfade opacity, plus
+  // the arm-sway uniforms (seeded here, written per-frame by `writeArmSway`).
   const lineUniformsA = useMemo(
     () => ({ uColor: { value: new Color(style.colorA) }, uOpacity: { value: 1 }, ...armUniforms }),
     [armUniforms, style.colorA],
@@ -571,15 +583,17 @@ function ShapeMeshes({
     setPoseOpacity(matB.current, poseOpB.current.opacity * invMix);
     if (halftoneMat.current) halftoneMat.current.uniforms.uOpacity.value = mix;
 
-    // Publish the breathe amplitude + phase to the shared uniforms (robot only),
-    // through the material ref (never the memoized object directly). The patched
-    // line materials point at these same uniform objects, so both styles' arms
-    // swing in lockstep. Amplitude is held at 0 under reduced motion → arms static.
-    if (arms && halftoneMat.current) {
-      const u = halftoneMat.current.uniforms;
-      u.uArmAmp.value = reduce ? 0 : ARM_SWAY_RAD;
-      u.uArmPhase.value = armPhase.current.phase;
-    }
+    // Publish the breathe amplitude + phase to EVERY arm-aware material — the two
+    // crease-line shaders AND the halftone — writing each material's own uniforms
+    // directly (not relying on a shared-reference assumption, which R3F/Three may
+    // not preserve per material). This is why both render styles swing in lockstep.
+    // Amplitude is 0 for the icosahedron (no arm uniforms → skipped) and under
+    // reduced motion, holding the arms static.
+    const amp = arms && !reduce ? ARM_SWAY_RAD : 0;
+    const phase = armPhase.current.phase;
+    writeArmSway(matA.current, amp, phase);
+    writeArmSway(matB.current, amp, phase);
+    writeArmSway(halftoneMat.current, amp, phase);
   });
 
   const blending = style.additive ? AdditiveBlending : NormalBlending;
