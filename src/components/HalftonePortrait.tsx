@@ -232,25 +232,27 @@ function buildDots(cells: Cells): Dots {
   };
 }
 
-/** Draw one assembly frame at progress `t` (0→1): dots ease from scatter→target,
- *  fading + growing in. At t=1 every dot sits exactly at its static position. */
-function drawDotsFrame(canvas: HTMLCanvasElement, dots: Dots, t: number) {
-  const ctx = canvas.getContext("2d");
+/** Draw one assembly frame at progress `t` (0→1) into the 4× scratch buffer: dots
+ *  ease from scatter→target, fading + growing in. Rendered at the SAME 4× scale as
+ *  the final buffer, so at t=1 the scratch is pixel-identical to `renderDotBuffer`
+ *  — the caller then quality-downscales it, so the last frame equals the settled
+ *  image exactly (no brightness pop/flash at the transition). */
+function drawAssemblyFrame(scratch: HTMLCanvasElement, dots: Dots, t: number) {
+  const ctx = scratch.getContext("2d");
   if (!ctx) return;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, scratch.width, scratch.height);
   ctx.fillStyle = "#ffffff";
-  const scale = canvas.width / dots.srcW;
-  const rBase = ((CELL * scale) / 2) * DOT_FACTOR;
+  const rBase = ((CELL * REF_SCALE) / 2) * DOT_FACTOR; // == final buffer's maxRadius
   const TAU = Math.PI * 2;
   for (let i = 0; i < dots.n; i++) {
     const d = dots.delay[i];
     const local = d >= 1 ? 0 : Math.min(1, Math.max(0, (t - d) / (1 - d)));
     const inv = 1 - local;
     const e = 1 - inv * inv * inv; // easeOutCubic per dot
-    const x = (dots.sx[i] + (dots.tx[i] - dots.sx[i]) * e) * scale;
-    const y = (dots.sy[i] + (dots.ty[i] - dots.sy[i]) * e) * scale;
+    const x = (dots.sx[i] + (dots.tx[i] - dots.sx[i]) * e) * REF_SCALE;
+    const y = (dots.sy[i] + (dots.ty[i] - dots.sy[i]) * e) * REF_SCALE;
     const r = dots.g[i] * rBase * (0.45 + 0.55 * e);
-    if (r <= 0.05) continue;
+    if (r <= 0.02) continue;
     ctx.globalAlpha = 0.12 + 0.88 * e; // faint when scattered → solid at rest
     ctx.beginPath();
     ctx.arc(x, y, r, 0, TAU);
@@ -275,12 +277,12 @@ export function HalftonePortrait() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     let cancelled = false;
-    let buffer: HTMLCanvasElement | null = null; // crisp final image
+    let buffer: HTMLCanvasElement | null = null; // crisp final image (4× dot render)
+    let scratch: HTMLCanvasElement | null = null; // 4× per-frame assembly render
     let dots: Dots | null = null;
     let settled = false;
     let lastKey = "";
     let tween: gsap.core.Tween | null = null;
-    let fadeTween: gsap.core.Tween | null = null;
     let idleTween: gsap.core.Tween | gsap.core.Timeline | null = null;
     const reduce = prefersReducedMotion();
 
@@ -306,36 +308,27 @@ export function HalftonePortrait() {
       blit(canvas, buffer);
     };
 
-    // Settle: crossfade the crisp buffer over the assembled dots (same positions →
-    // a smooth "focus" instead of a pop), then hold the exact static image.
+    // Render one assembly frame: draw the moving dots into the 4× scratch, then
+    // quality-downscale to the display canvas — the SAME path as the final image,
+    // so t=1 already equals the settled render (no transition pop).
+    const drawFrame = (t: number) => {
+      if (!dots || !scratch) return;
+      drawAssemblyFrame(scratch, dots, t);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(scratch, 0, 0, canvas.width, canvas.height);
+    };
+
+    // Settle: the last assembly frame is already pixel-identical to the buffer, so
+    // just lock the exact static image (no crossfade / no brightness flash).
     const settle = () => {
       settled = true;
       lastKey = "";
-      if (reduce || !dots || !buffer) {
-        blitFinal();
-        startIdle();
-        return;
-      }
-      const f = { a: 0 };
-      fadeTween = gsap.to(f, {
-        a: 1,
-        duration: 0.3,
-        ease: "power1.out",
-        onUpdate: () => {
-          if (!dots || !buffer) return;
-          drawDotsFrame(canvas, dots, 1);
-          const ctx = canvas.getContext("2d");
-          if (!ctx) return;
-          ctx.globalAlpha = f.a;
-          ctx.drawImage(buffer, 0, 0, canvas.width, canvas.height);
-          ctx.globalAlpha = 1;
-        },
-        onComplete: () => {
-          lastKey = "";
-          blitFinal();
-          startIdle();
-        },
-      });
+      blitFinal();
+      startIdle();
     };
 
     const img = new Image();
@@ -349,13 +342,17 @@ export function HalftonePortrait() {
           return;
         }
         dots = buildDots(cells);
+        scratch = document.createElement("canvas");
+        scratch.width = buffer.width;
+        scratch.height = buffer.height;
         sizeCanvas();
         const p = { t: 0 };
+        drawFrame(0); // paint the initial scattered frame immediately
         tween = gsap.to(p, {
           t: 1,
           duration: ASSEMBLE_DURATION,
           ease: "none", // per-dot easeOutCubic + stagger shapes the feel
-          onUpdate: () => dots && drawDotsFrame(canvas, dots, p.t),
+          onUpdate: () => drawFrame(p.t),
           onComplete: settle,
         });
       } catch {
@@ -377,7 +374,6 @@ export function HalftonePortrait() {
     return () => {
       cancelled = true;
       tween?.kill();
-      fadeTween?.kill();
       idleTween?.kill();
       ro.disconnect();
     };
