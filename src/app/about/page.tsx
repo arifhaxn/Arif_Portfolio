@@ -4,15 +4,14 @@
 // /about — portrait hero + description + skills + contact
 // -----------------------------------------------------------------------------
 // Its own route (nav "About" → /about). Structure, per the references:
-//   1. Hero — a portrait placeholder centered, name in the bottom-left, a
+//   1. Hero — halftone-dot portrait centered, name in the bottom-left, a
 //      "scroll" cue, coding-since bottom-right.
 //   2. Description — headline + bio on the LEFT, the android (robot) on the RIGHT.
 //   3. Skills — big-title blocks (index — / Category / items), one per group.
 //   4. Contact — giant email, a scrolling tag ribbon, copy-email + socials.
 //
-// ⚠ PLACEHOLDERS: the hero portrait (owner hasn't chosen an image), the
-// description headline/bio copy, and the coding-since year (Hud.tsx) are all
-// stand-ins to be replaced.
+// ⚠ PLACEHOLDER: the description headline/bio copy is still a stand-in to be
+// replaced in the owner's voice.
 // -----------------------------------------------------------------------------
 
 import { useRef, useState } from "react";
