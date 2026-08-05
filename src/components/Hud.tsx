@@ -9,9 +9,7 @@
 //     tokens (indicatorExit fade, ghostHold hold). Under prefers-reduced-motion
 //     the phrase swaps instantly (no fade) — the clock itself is information,
 //     not decoration, so it keeps ticking.
-//   • <CodingSince> — the bottom-right "YEAR / CODING SINCE" meta.
-//     ⚠ PLACEHOLDER: the year renders "20XX" until the site owner provides the
-//     real start year — search for CODING_SINCE_YEAR to fix.
+//   • <CodingSince> — the bottom-right "YEAR / CODING SINCE" meta (2024).
 //
 // Both render as tiny mono uppercase text, consistent with the site's HUD
 // typography (nav links, project numbers).
@@ -22,9 +20,7 @@ import { gsap } from "@/lib/gsap";
 import { prefersReducedMotion } from "@/lib/animations";
 import { DURATION, EASE } from "@/lib/motion";
 
-// ⚠ PLACEHOLDER — real "coding since" year not provided yet. Replace "20XX"
-// with the actual year (e.g. "2017") when the site owner confirms it.
-const CODING_SINCE_YEAR = "20XX";
+const CODING_SINCE_YEAR = "2024";
 
 const TIME_ZONE = "Asia/Dhaka"; // Sylhet, Bangladesh (GMT+6)
 const STATUS_PHRASES = ["BUILDING", "LEARNING", "SHIPPING"];
