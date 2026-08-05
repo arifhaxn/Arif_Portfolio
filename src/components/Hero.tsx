@@ -16,12 +16,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { navIntro } from "@/lib/animations";
 import { onReveal } from "@/lib/introControl";
 import { LiveStatus } from "@/components/Hud";
 import { ScrambleText } from "@/components/ScrambleText";
-import { SOCIALS } from "@/lib/about";
+import { useHeadScan } from "@/components/providers/HeadScanProvider";
+
+const CONTACT_HREF = "/about#contact";
 
 const HeroHead = dynamic(
   () => import("@/components/HeroHead").then((m) => m.HeroHead),
@@ -30,6 +35,16 @@ const HeroHead = dynamic(
 
 export function Hero() {
   const root = useRef<HTMLElement>(null);
+  const router = useRouter();
+  const headScan = useHeadScan();
+
+  // Play the robot exit-scan before navigating (same transition the Navbar uses).
+  const goContact = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    if (!headScan.hasMounted()) return; // no robot yet → default <Link> navigation
+    e.preventDefault();
+    void headScan.playExitAll().then(() => router.push(CONTACT_HREF));
+  };
 
   // Keep the nameplate hidden until the intro reveals the page, so the fade/rise
   // + scramble entrance plays IN VIEW rather than behind the preloader cover.
@@ -115,26 +130,33 @@ export function Hero() {
         </h1>
       </div>
 
-      {/* --- Socials — bottom-RIGHT (monochrome icons) -------------------- */}
-      <div
+      {/* --- Book-a-Call CTA — bottom-RIGHT (white → black + grow on hover) -- */}
+      <Link
+        href={CONTACT_HREF}
+        onClick={goContact}
         data-hero-line
-        className="absolute bottom-12 right-6 z-10 flex items-center gap-5 text-zinc-400 sm:right-10"
+        aria-label="Book a call — go to contact"
+        className="group absolute bottom-12 right-6 z-10 flex items-center gap-3 rounded-2xl bg-white py-2 pl-2 pr-5 shadow-lg shadow-black/30 ring-1 ring-black/5 transition-[transform,background-color,box-shadow] duration-300 ease-out hover:scale-[1.05] hover:bg-black hover:ring-white/15 sm:right-10"
       >
-        {SOCIALS.map((s) => (
-          <a
-            key={s.label}
-            href={s.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={s.label}
-            className="transition-colors hover:text-white"
-          >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden>
-              <path d={s.icon} />
-            </svg>
-          </a>
-        ))}
-      </div>
+        {/* Avatar thumbnail (self-contained, so it reads on either button color) */}
+        <span className="relative block h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-orange-700/60 via-orange-950 to-black">
+          <Image
+            src="/hero-portrait-cutout.png"
+            alt=""
+            width={96}
+            height={96}
+            className="h-full w-full scale-110 object-cover object-top"
+          />
+        </span>
+        <span className="flex flex-col text-left leading-tight">
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-orange-900/80 transition-colors duration-300 group-hover:text-zinc-400">
+            I am ready to
+          </span>
+          <span className="text-lg font-semibold text-black transition-colors duration-300 group-hover:text-white">
+            Book a Call
+          </span>
+        </span>
+      </Link>
     </section>
   );
 }
