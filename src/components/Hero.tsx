@@ -16,7 +16,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { gsap, useGSAP } from "@/lib/gsap";
@@ -130,32 +129,15 @@ export function Hero() {
         </h1>
       </div>
 
-      {/* --- Book-a-Call CTA — bottom-RIGHT (white → black + grow on hover) -- */}
+      {/* --- Contact CTA — bottom-RIGHT (white → black + grow on hover) ---- */}
       <Link
         href={CONTACT_HREF}
         onClick={goContact}
         data-hero-line
-        aria-label="Book a call — go to contact"
-        className="group absolute bottom-12 right-6 z-10 flex items-center gap-3 rounded-2xl bg-white py-2 pl-2 pr-5 shadow-lg shadow-black/30 ring-1 ring-black/5 transition-[transform,background-color,box-shadow] duration-300 ease-out hover:scale-[1.05] hover:bg-black hover:ring-white/15 sm:right-10"
+        aria-label="Contact me"
+        className="group absolute bottom-12 right-6 z-10 rounded-2xl bg-white px-6 py-3 text-lg font-semibold text-black shadow-lg shadow-black/30 ring-1 ring-black/5 transition-[transform,background-color,color,box-shadow] duration-300 ease-out hover:scale-[1.05] hover:bg-black hover:text-white hover:ring-white/15 sm:right-10"
       >
-        {/* Avatar thumbnail (self-contained, so it reads on either button color) */}
-        <span className="relative block h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-orange-700/60 via-orange-950 to-black">
-          <Image
-            src="/hero-portrait-cutout.png"
-            alt=""
-            width={96}
-            height={96}
-            className="h-full w-full scale-110 object-cover object-top"
-          />
-        </span>
-        <span className="flex flex-col text-left leading-tight">
-          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-orange-900/80 transition-colors duration-300 group-hover:text-zinc-400">
-            I am ready to
-          </span>
-          <span className="text-lg font-semibold text-black transition-colors duration-300 group-hover:text-white">
-            Book a Call
-          </span>
-        </span>
+        Contact me
       </Link>
     </section>
   );
