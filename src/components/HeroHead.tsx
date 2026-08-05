@@ -54,12 +54,13 @@ import {
 } from "three";
 import {
   armBreathe,
+  assembleIn,
   headPointerTilt,
   idlePoseSwap,
   prefersReducedMotion,
   styleShift,
 } from "@/lib/animations";
-import { ARM_BREATHE } from "@/lib/motion";
+import { ARM_BREATHE, ASSEMBLE } from "@/lib/motion";
 
 // -----------------------------------------------------------------------------
 // ▶ ROBOT ARM-BREATHE (Path B) — shoulder-pivot vertex sway for the fused mesh.
@@ -111,6 +112,37 @@ const ARM_BREATHE_GLSL = /* glsl */ `
 const ARM_SWAY_RAD = MathUtils.degToRad(ARM_BREATHE.swayDeg);
 
 // -----------------------------------------------------------------------------
+// ▶ ROBOT ASSEMBLE-IN — particle-combine entrance for the crease lines. Each
+// vertex starts scattered in 3D by a deterministic per-vertex random offset
+// (magnitude uScatter, local units) and converges to its target as uAssemble
+// 0→1, with a per-vertex stagger + fade so it reads like particles gathering into
+// the form (echoing the About portrait's dot assembly). uAssemble stays 1 (no
+// scatter) for reduced motion / anything that doesn't drive it; the robot tweens
+// it 0→1 on mount via `assembleIn`. `vAssembleAlpha` fades each vertex in.
+// -----------------------------------------------------------------------------
+const ASSEMBLE_GLSL = /* glsl */ `
+  uniform float uAssemble;      // 0 scattered → 1 formed
+  uniform float uScatter;       // scatter magnitude (mesh-local units)
+  varying float vAssembleAlpha; // per-vertex fade (faint scattered → solid formed)
+  vec3 hash31(vec3 p3) {
+    p3 = fract(p3 * vec3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, p3.yxz + 33.33);
+    return fract((p3.xxy + p3.yzz) * p3.zyx) * 2.0 - 1.0;
+  }
+  vec3 applyAssemble(vec3 p) {
+    if (uAssemble >= 1.0) { vAssembleAlpha = 1.0; return p; }
+    vec3 h = hash31(p * 19.0 + 3.7);
+    float delay = (h.z * 0.5 + 0.5) * 0.35;             // per-vertex stagger
+    float local = clamp((uAssemble - delay) / (1.0 - delay), 0.0, 1.0);
+    float e = 1.0 - pow(1.0 - local, 3.0);              // easeOutCubic
+    vec3 dir = normalize(h + vec3(1e-3));
+    vec3 scattered = p + dir * uScatter * (0.55 + 0.45 * (h.y * 0.5 + 0.5));
+    vAssembleAlpha = e;
+    return mix(scattered, p, e);
+  }
+`;
+
+// -----------------------------------------------------------------------------
 // Robot crease-line shader (Style A). The crease edges are drawn with an EXPLICIT
 // shader material — not lineBasicMaterial — so the exact same `applyArmBreathe`
 // vertex displacement as the halftone runs on the lines too (both styles must
@@ -121,17 +153,21 @@ const ARM_SWAY_RAD = MathUtils.degToRad(ARM_BREATHE.swayDeg);
 // -----------------------------------------------------------------------------
 const LINE_VERTEX = /* glsl */ `
   ${ARM_BREATHE_GLSL}
+  ${ASSEMBLE_GLSL}
   void main() {
-    vec3 armPos = applyArmBreathe(position);
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(armPos, 1.0);
+    // Scatter → converge (assemble-in), then sway (arm-breathe).
+    vec3 pos = applyAssemble(applyArmBreathe(position));
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
   }
 `;
 const LINE_FRAGMENT = /* glsl */ `
   uniform vec3 uColor;
   uniform float uOpacity;
+  varying float vAssembleAlpha;
   void main() {
-    if (uOpacity <= 0.001) discard;
-    gl_FragColor = vec4(uColor, uOpacity);
+    float a = uOpacity * vAssembleAlpha; // fade each vertex in as it converges
+    if (a <= 0.001) discard;
+    gl_FragColor = vec4(uColor, a);
   }
 `;
 
@@ -152,6 +188,14 @@ function writeArmSway(m: MeshBasicMaterial | ShaderMaterial | null, amp: number,
   if (!uArmAmp || !uArmPhase) return;
   uArmAmp.value = amp;
   uArmPhase.value = phase;
+}
+
+/** Write the assemble-in progress (0→1) to a material carrying `uAssemble` (the
+ *  robot's crease-line shaders). No-op for anything else. */
+function writeAssemble(m: MeshBasicMaterial | ShaderMaterial | null, v: number) {
+  if (!(m instanceof ShaderMaterial)) return;
+  const u = m.uniforms.uAssemble;
+  if (u) u.value = v;
 }
 
 // -----------------------------------------------------------------------------
@@ -520,6 +564,18 @@ function ShapeMeshes({
     [],
   );
 
+  // Assemble-in (robot crease lines only). `assemble.v` is tweened 0→1 on mount;
+  // the line shaders scatter → converge from it. Seeded per Style-A line material;
+  // starts scattered (0) for the robot, formed (1) otherwise / reduced motion.
+  const assemble = useRef({ v: arms && !reduce ? 0 : 1 });
+  const assembleUniforms = useMemo(
+    () => ({
+      uAssemble: { value: arms && !reduce ? 0 : 1 },
+      uScatter: { value: ASSEMBLE.scatter },
+    }),
+    [arms, reduce],
+  );
+
   // Pose cross-fade drives these plain values (not the materials directly), so
   // the separate STYLE cross-fade can multiply on top without a GSAP conflict.
   const poseOpA = useRef({ opacity: 1 });
@@ -543,28 +599,50 @@ function ShapeMeshes({
   // Style A crease-line uniforms (robot). Own color + pose-crossfade opacity, plus
   // the arm-sway uniforms (seeded here, written per-frame by `writeArmSway`).
   const lineUniformsA = useMemo(
-    () => ({ uColor: { value: new Color(style.colorA) }, uOpacity: { value: 1 }, ...armUniforms }),
-    [armUniforms, style.colorA],
+    () => ({
+      uColor: { value: new Color(style.colorA) },
+      uOpacity: { value: 1 },
+      ...armUniforms,
+      ...assembleUniforms,
+    }),
+    [armUniforms, assembleUniforms, style.colorA],
   );
   const lineUniformsB = useMemo(
-    () => ({ uColor: { value: new Color(style.colorB) }, uOpacity: { value: 0 }, ...armUniforms }),
-    [armUniforms, style.colorB],
+    () => ({
+      uColor: { value: new Color(style.colorB) },
+      uOpacity: { value: 0 },
+      ...armUniforms,
+      ...assembleUniforms,
+    }),
+    [armUniforms, assembleUniforms, style.colorB],
   );
 
-  // Pose cross-fade (short cycle) + style shift (long cycle) run alongside.
+  // Pose cross-fade (short cycle) + style shift (long cycle) run alongside. On the
+  // robot, hold the style shift until the assemble-in finishes so the halftone
+  // (Style B) doesn't appear mid-scatter — only the crease lines assemble.
   useEffect(() => {
     const poseTl = idlePoseSwap(poseOpA.current, poseOpB.current);
     const styleTl = styleShift(styleMix.current);
+    if (arms && !reduce) styleTl.delay(ASSEMBLE.duration);
     return () => {
       poseTl.kill();
       styleTl.kill();
     };
-  }, []);
+  }, [arms, reduce]);
 
   // Drive the breathe phase on the shared GSAP ticker (robot, motion allowed).
   useEffect(() => {
     if (!arms || reduce) return;
     const tw = armBreathe(armPhase.current);
+    return () => {
+      tw.kill();
+    };
+  }, [arms, reduce]);
+
+  // Assemble-in on mount: tween `assemble.v` 0→1 (robot, motion allowed).
+  useEffect(() => {
+    if (!arms || reduce) return;
+    const tw = assembleIn(assemble.current);
     return () => {
       tw.kill();
     };
@@ -597,6 +675,13 @@ function ShapeMeshes({
     writeArmSway(matA.current, amp, phase);
     writeArmSway(matB.current, amp, phase);
     writeArmSway(halftoneMat.current, amp, phase);
+
+    // Assemble-in progress → the crease-line shaders (robot only).
+    if (arms) {
+      const av = assemble.current.v;
+      writeAssemble(matA.current, av);
+      writeAssemble(matB.current, av);
+    }
   });
 
   const blending = style.additive ? AdditiveBlending : NormalBlending;

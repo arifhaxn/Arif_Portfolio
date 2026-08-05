@@ -134,6 +134,19 @@ export const ARM_BREATHE = {
 } as const;
 
 /**
+ * Robot assemble-in entrance (see `assembleIn` + HeroHead's `ASSEMBLE_GLSL`). On
+ * mount the crease-line vertices start scattered in 3D (a per-vertex random offset
+ * of `scatter` local units) and converge into the form over `duration`, fading in
+ * per vertex — a particle-combine entry echoing the About portrait. `scatter` is
+ * in the mesh's local space (the model spans ~±0.8); disabled under reduced motion.
+ */
+export const ASSEMBLE = {
+  duration: 1.6, // s — vertices converge into the form
+  scatter: 1.5, // local units — how far each vertex starts scattered
+  ease: "power3.out", // convergence curve
+} as const;
+
+/**
  * Text-scramble / decode effect (see ScrambleText + `scrambleText`). Characters
  * cycle through random glyphs and lock in left-to-right. `duration` is the reveal
  * speed per element; `sweep` is the fraction of the timeline the L→R lock points
