@@ -4,22 +4,24 @@
 // HalftonePortrait — static halftone-dot rendering of the hero cutout photo
 // -----------------------------------------------------------------------------
 // Replaces the About hero's "AH / Portrait — placeholder" card with a canvas-2D
-// halftone-dot portrait built ONCE on mount from a background-removed PNG
+// halftone-dot portrait built from a background-removed PNG
 // (public/hero-portrait-cutout.png — its alpha channel is the subject mask, so
 // only the subject gets dots and the background stays empty/transparent).
 //
-// The algorithm + constants below were tuned interactively and confirmed — they
-// are intentionally exact, not a re-derivation:
+// Pipeline (tuned interactively and confirmed — the constants are exact):
 //   1. draw source → grayscale (Rec.601 luma)
-//   2. contrast ×1.4, then an unsharp-mask sharpen (blur r2px, amount 180%,
-//      threshold 2) — the source is low-res (471×530), so this keeps dots crisp
-//   3. 5px source cells, rendered into a canvas 4× the source size
-//   4. per cell: skip if avg alpha < 140/255; else map avg luma → dot radius
-//      via lum^1.85 × (cell·scale/2) × 0.92; skip radii < 0.5px (shadows fall to
-//      nothing); draw a solid white circle at the cell centre.
-// It's a STATIC image (not per-frame WebGL): drawn once, then cached on the
-// canvas. CSS scales the fixed-resolution canvas to the card's footprint; the
-// fade+rise entrance is driven by `heroTitleIn` from the About hero.
+//   2. contrast ×1.4, then unsharp mask (blur r2px, amount 180%, threshold 2)
+//   3. 5px source cells → per-cell average luma + alpha (computed ONCE)
+//   4. per cell: skip if avg alpha < 140/255; else map luma → dot radius via
+//      lum^1.85 × (cell·scale/2) × 0.92; a dot is visible when its radius at the
+//      tuned 4× basis clears 0.5px (scale-invariant, so the dot SET matches the
+//      tuned look at any size); draw a solid white circle at the cell centre.
+//
+// CRISPNESS: the dots are drawn at the canvas's ACTUAL displayed resolution
+// (CSS size × devicePixelRatio, capped at the tuned 4× source), NOT a fixed 4×
+// buffer that the browser then downsamples — downsampling a fine dot field
+// shrinks + greys the dots (looked dim). Redraws on resize; the heavy per-pixel
+// pass runs once and is cached, only the cheap dot pass repeats.
 // -----------------------------------------------------------------------------
 
 import { useEffect, useRef, useState } from "react";
@@ -27,7 +29,6 @@ import { useEffect, useRef, useState } from "react";
 const SRC = "/hero-portrait-cutout.png";
 
 // --- tuned constants (do not "improve" without re-tuning against the source) ---
-const OUTPUT_SCALE = 4; // render canvas at 4× the source dimensions
 const CELL = 5; // source px per dot cell
 const ALPHA_MIN = 140; // skip cells whose avg alpha < ~55% (transparent bg)
 const CONTRAST = 1.4; // grayscale contrast multiplier
@@ -36,44 +37,52 @@ const USM_AMOUNT = 1.8; // unsharp-mask amount (180%)
 const USM_THRESHOLD = 2; // unsharp-mask threshold (0–255 luma delta)
 const DOT_GAMMA = 1.85; // luminance→radius falloff exponent
 const DOT_FACTOR = 0.92; // radius scale within the cell
-const MIN_RADIUS = 0.5; // drop sub-half-pixel dots (shadows → nothing)
+const MIN_RADIUS = 0.5; // drop dots below this radius at the reference scale
+const REF_SCALE = 4; // the tuned reference output scale (dot-set + max render res)
 
 const clamp255 = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v);
 
-/** Draw the halftone portrait into `canvas` from a loaded `img`. Runs once. */
-function renderHalftone(canvas: HTMLCanvasElement, img: HTMLImageElement) {
-  const SW = img.naturalWidth;
-  const SH = img.naturalHeight;
-  if (!SW || !SH) throw new Error("empty source image");
+type Cells = {
+  srcW: number;
+  srcH: number;
+  cols: number;
+  rows: number;
+  lum: Float32Array; // per-cell average luminance, 0–1
+  alpha: Float32Array; // per-cell average alpha, 0–255
+};
 
-  // 1 — source pixels (RGB for luma, A for the subject mask).
+/** Heavy pass — grayscale → contrast → unsharp mask → per-cell averages. Once. */
+function processImage(img: HTMLImageElement): Cells {
+  const srcW = img.naturalWidth;
+  const srcH = img.naturalHeight;
+  if (!srcW || !srcH) throw new Error("empty source image");
+
   const src = document.createElement("canvas");
-  src.width = SW;
-  src.height = SH;
+  src.width = srcW;
+  src.height = srcH;
   const sctx = src.getContext("2d", { willReadFrequently: true });
   if (!sctx) throw new Error("no 2d context");
   sctx.drawImage(img, 0, 0);
-  const px = sctx.getImageData(0, 0, SW, SH).data;
+  const px = sctx.getImageData(0, 0, srcW, srcH).data;
 
-  const N = SW * SH;
-  const gray = new Float32Array(N); // grayscale + contrast
+  const N = srcW * srcH;
+  const gray = new Float32Array(N);
   const alpha = new Uint8ClampedArray(N);
   for (let i = 0; i < N; i++) {
     const r = px[i * 4], g = px[i * 4 + 1], b = px[i * 4 + 2];
     alpha[i] = px[i * 4 + 3];
-    // 2a — Rec.601 luma → contrast about mid-grey.
     const luma = 0.299 * r + 0.587 * g + 0.114 * b;
     gray[i] = clamp255((luma - 128) * CONTRAST + 128);
   }
 
-  // 2b — unsharp mask: blur the grayscale (canvas blur ≈ radius px), then add
-  // back the high-frequency difference where it exceeds the threshold.
+  // unsharp mask: blur the grayscale (canvas blur ≈ radius px), add back the
+  // high-frequency difference where it exceeds the threshold.
   const grayCanvas = document.createElement("canvas");
-  grayCanvas.width = SW;
-  grayCanvas.height = SH;
+  grayCanvas.width = srcW;
+  grayCanvas.height = srcH;
   const gctx = grayCanvas.getContext("2d", { willReadFrequently: true });
   if (!gctx) throw new Error("no 2d context");
-  const grayImg = gctx.createImageData(SW, SH);
+  const grayImg = gctx.createImageData(srcW, srcH);
   for (let i = 0; i < N; i++) {
     const v = gray[i];
     grayImg.data[i * 4] = v;
@@ -84,67 +93,78 @@ function renderHalftone(canvas: HTMLCanvasElement, img: HTMLImageElement) {
   gctx.putImageData(grayImg, 0, 0);
 
   const blurCanvas = document.createElement("canvas");
-  blurCanvas.width = SW;
-  blurCanvas.height = SH;
+  blurCanvas.width = srcW;
+  blurCanvas.height = srcH;
   const bctx = blurCanvas.getContext("2d", { willReadFrequently: true });
   if (!bctx) throw new Error("no 2d context");
   bctx.filter = `blur(${USM_RADIUS}px)`;
   bctx.drawImage(grayCanvas, 0, 0);
-  const blur = bctx.getImageData(0, 0, SW, SH).data;
+  const blur = bctx.getImageData(0, 0, srcW, srcH).data;
 
   const lum = new Float32Array(N);
   for (let i = 0; i < N; i++) {
-    const diff = gray[i] - blur[i * 4]; // blurred is grey → R channel
+    const diff = gray[i] - blur[i * 4];
     lum[i] = clamp255(Math.abs(diff) > USM_THRESHOLD ? gray[i] + USM_AMOUNT * diff : gray[i]);
   }
 
-  // 3 — accumulate per-cell averages of luma + alpha.
-  const cols = Math.ceil(SW / CELL);
-  const rows = Math.ceil(SH / CELL);
+  // per-cell averages of luma (→0–1) + alpha.
+  const cols = Math.ceil(srcW / CELL);
+  const rows = Math.ceil(srcH / CELL);
   const sumL = new Float32Array(cols * rows);
   const sumA = new Float32Array(cols * rows);
   const count = new Uint32Array(cols * rows);
-  for (let y = 0; y < SH; y++) {
+  for (let y = 0; y < srcH; y++) {
     const cy = (y / CELL) | 0;
-    for (let x = 0; x < SW; x++) {
+    for (let x = 0; x < srcW; x++) {
       const ci = cy * cols + ((x / CELL) | 0);
-      const i = y * SW + x;
+      const i = y * srcW + x;
       sumL[ci] += lum[i];
       sumA[ci] += alpha[i];
       count[ci]++;
     }
   }
+  const cellLum = new Float32Array(cols * rows);
+  const cellAlpha = new Float32Array(cols * rows);
+  for (let ci = 0; ci < cols * rows; ci++) {
+    const c = count[ci];
+    if (!c) continue;
+    cellLum[ci] = sumL[ci] / c / 255;
+    cellAlpha[ci] = sumA[ci] / c;
+  }
+  return { srcW, srcH, cols, rows, lum: cellLum, alpha: cellAlpha };
+}
 
-  // 4 — draw dots into the 4× output canvas (transparent background).
-  canvas.width = SW * OUTPUT_SCALE;
-  canvas.height = SH * OUTPUT_SCALE;
-  const octx = canvas.getContext("2d");
-  if (!octx) throw new Error("no 2d context");
-  octx.clearRect(0, 0, canvas.width, canvas.height);
-  octx.fillStyle = "#ffffff";
-  const maxRadius = ((CELL * OUTPUT_SCALE) / 2) * DOT_FACTOR; // 9.2px at luma=1
+/** Cheap pass — draw the white dots into `canvas` at `scale` (output px / src px). */
+function drawDots(canvas: HTMLCanvasElement, cells: Cells, scale: number) {
+  const { srcW, srcH, cols, rows, lum, alpha } = cells;
+  canvas.width = Math.max(1, Math.round(srcW * scale));
+  canvas.height = Math.max(1, Math.round(srcH * scale));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#ffffff";
+  const drawMax = ((CELL * scale) / 2) * DOT_FACTOR; // radius at THIS scale
+  const refMax = ((CELL * REF_SCALE) / 2) * DOT_FACTOR; // radius at the tuned 4×
   const TAU = Math.PI * 2;
   for (let cy = 0; cy < rows; cy++) {
     for (let cx = 0; cx < cols; cx++) {
       const ci = cy * cols + cx;
-      const c = count[ci];
-      if (!c) continue;
-      if (sumA[ci] / c < ALPHA_MIN) continue; // background / soft edge → no dot
-      const l = sumL[ci] / c / 255;
-      const radius = Math.pow(l, DOT_GAMMA) * maxRadius;
-      if (radius < MIN_RADIUS) continue; // shadows fall away to nothing
-      const ox = (cx * CELL + CELL / 2) * OUTPUT_SCALE;
-      const oy = (cy * CELL + CELL / 2) * OUTPUT_SCALE;
-      octx.beginPath();
-      octx.arc(ox, oy, radius, 0, TAU);
-      octx.fill();
+      if (alpha[ci] < ALPHA_MIN) continue; // background / soft edge → no dot
+      const g = Math.pow(lum[ci], DOT_GAMMA);
+      if (g * refMax < MIN_RADIUS) continue; // scale-invariant cull (matches 4× tuning)
+      const radius = g * drawMax;
+      const ox = (cx * CELL + CELL / 2) * scale;
+      const oy = (cy * CELL + CELL / 2) * scale;
+      ctx.beginPath();
+      ctx.arc(ox, oy, radius, 0, TAU);
+      ctx.fill();
     }
   }
 }
 
 /**
  * Halftone-dot hero portrait. `data-hero-portrait` marks the entrance target so
- * the About hero can drive its fade+rise via `heroTitleIn` (in sync with the
+ * the About hero drives its fade+rise via `heroTitleIn` (in sync with the
  * nameplate). If the source PNG is missing/undecodable, a clearly-flagged
  * placeholder card stands in instead of crashing.
  */
@@ -156,11 +176,27 @@ export function HalftonePortrait() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     let cancelled = false;
+    let cells: Cells | null = null;
+    let lastScale = 0;
+
+    const paint = () => {
+      if (!cells || cancelled) return;
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = canvas.clientWidth || cells.srcW;
+      // Draw at the real displayed resolution (× dpr) so the browser never
+      // downsamples the dot field; never finer than the tuned 4× source.
+      const scale = Math.min((cssW * dpr) / cells.srcW, REF_SCALE);
+      if (Math.abs(scale - lastScale) < 0.01) return; // no meaningful change
+      lastScale = scale;
+      drawDots(canvas, cells, scale);
+    };
+
     const img = new Image();
     img.onload = () => {
       if (cancelled) return;
       try {
-        renderHalftone(canvas, img);
+        cells = processImage(img);
+        paint();
       } catch {
         setFailed(true);
       }
@@ -169,16 +205,18 @@ export function HalftonePortrait() {
       if (!cancelled) setFailed(true);
     };
     img.src = SRC;
+
+    const ro = new ResizeObserver(() => paint());
+    ro.observe(canvas);
     return () => {
       cancelled = true;
+      ro.disconnect();
     };
   }, []);
 
   return (
-    // Sized LARGE on purpose: at the old ~315px the browser downsampled the
-    // 1884px dot canvas ~6× and blurred the fine dots into muddy grey. Height-
-    // based so it stays a tall, prominent portrait; ~600–680px on desktop keeps
-    // the downscale ≲3× so the dots read crisp + bright (like the tuned source).
+    // Sized LARGE and rendered at display resolution (see header): a tall,
+    // prominent portrait whose dots stay crisp + bright at any viewport.
     <div
       data-hero-portrait
       aria-hidden
@@ -194,7 +232,6 @@ export function HalftonePortrait() {
           </span>
         </div>
       ) : (
-        // Fixed-resolution canvas; CSS scales it to the card footprint.
         <canvas ref={canvasRef} className="block h-full w-full" />
       )}
     </div>
