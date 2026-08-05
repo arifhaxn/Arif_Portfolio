@@ -60,7 +60,7 @@ export default function AboutPage() {
             text — absolute inset-0 so the section's top padding doesn't push it
             low. Nudged slightly right so it reads centered against the big
             bottom-left nameplate. */}
-        <div className="pointer-events-none absolute inset-0 z-0 flex translate-x-[4vw] items-center justify-center">
+        <div className="pointer-events-none absolute inset-0 z-0 flex translate-x-[1.5vw] items-center justify-center">
           <HalftonePortrait />
         </div>
 
