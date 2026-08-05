@@ -17,7 +17,7 @@
 import { useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useGSAP } from "@/lib/gsap";
-import { floatLoop, heroTitleIn, marqueeLoop, scrollReveal } from "@/lib/animations";
+import { floatLoop, marqueeLoop, scrollReveal } from "@/lib/animations";
 import { ScrambleText } from "@/components/ScrambleText";
 import { HalftonePortrait } from "@/components/HalftonePortrait";
 import { CodingSince } from "@/components/Hud";
@@ -34,8 +34,7 @@ export default function AboutPage() {
 
   useGSAP(
     () => {
-      // Hero portrait fades + rises in with the nameplate (shared hero timing).
-      heroTitleIn("[data-hero-portrait]");
+      // (The hero portrait runs its own dot-assembly entrance in HalftonePortrait.)
       scrollReveal("[data-desc]", { y: 24 }, "top 85%");
       scrollReveal("[data-skill]", { y: 24 }, "top 88%");
       scrollReveal("[data-contact]", { y: 24 }, "top 88%");

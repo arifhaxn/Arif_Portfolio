@@ -28,6 +28,8 @@
 // -----------------------------------------------------------------------------
 
 import { useEffect, useRef, useState } from "react";
+import { gsap } from "@/lib/gsap";
+import { prefersReducedMotion } from "@/lib/animations";
 
 const SRC = "/hero-portrait-cutout.png";
 
@@ -43,6 +45,11 @@ const USM_THRESHOLD = 2; // unsharp-mask threshold (0–255 luma delta)
 // factor lets highlight dots just touch (fills the cell) without merging.
 const DOT_GAMMA = 1.3; // luminance→radius falloff exponent (lower = brighter mids)
 const DOT_FACTOR = 1.0; // radius scale within the cell
+
+// --- entrance assembly (dots converge from scattered positions) ---
+const ASSEMBLE_DURATION = 1.8; // s — total convergence time
+const ASSEMBLE_STAGGER = 0.45; // max per-dot start delay (fraction of duration)
+const SCATTER_OVERSCAN = 0.15; // dots start spread across the box + this margin
 const MIN_RADIUS = 0.5; // drop dots below this radius at the reference scale
 const REF_SCALE = 4; // the tuned reference output scale (dot-set + max render res)
 
@@ -182,11 +189,81 @@ function blit(canvas: HTMLCanvasElement, buffer: HTMLCanvasElement) {
   ctx.drawImage(buffer, 0, 0, canvas.width, canvas.height);
 }
 
+// --- entrance assembly -------------------------------------------------------
+
+type Dots = {
+  n: number;
+  srcW: number;
+  srcH: number;
+  tx: Float32Array; // target cell centre (source space)
+  ty: Float32Array;
+  g: Float32Array; // luma^gamma → radius factor
+  sx: Float32Array; // scattered start (source space)
+  sy: Float32Array;
+  delay: Float32Array; // 0..ASSEMBLE_STAGGER
+};
+
+/** Build the flat dot list (targets + random scatter starts) for the assembly. */
+function buildDots(cells: Cells): Dots {
+  const { srcW, srcH, cols, rows, lum, alpha } = cells;
+  const refMax = ((CELL * REF_SCALE) / 2) * DOT_FACTOR;
+  const tx: number[] = [], ty: number[] = [], g: number[] = [];
+  const sx: number[] = [], sy: number[] = [], delay: number[] = [];
+  const span = 1 + SCATTER_OVERSCAN * 2;
+  for (let cy = 0; cy < rows; cy++) {
+    for (let cx = 0; cx < cols; cx++) {
+      const ci = cy * cols + cx;
+      if (alpha[ci] < ALPHA_MIN) continue;
+      const gg = Math.pow(lum[ci], DOT_GAMMA);
+      if (gg * refMax < MIN_RADIUS) continue; // same dot set as the static image
+      tx.push(cx * CELL + CELL / 2);
+      ty.push(cy * CELL + CELL / 2);
+      g.push(gg);
+      sx.push((Math.random() * span - SCATTER_OVERSCAN) * srcW);
+      sy.push((Math.random() * span - SCATTER_OVERSCAN) * srcH);
+      delay.push(Math.random() * ASSEMBLE_STAGGER);
+    }
+  }
+  return {
+    n: tx.length, srcW, srcH,
+    tx: new Float32Array(tx), ty: new Float32Array(ty), g: new Float32Array(g),
+    sx: new Float32Array(sx), sy: new Float32Array(sy), delay: new Float32Array(delay),
+  };
+}
+
+/** Draw one assembly frame at progress `t` (0→1): dots ease from scatter→target,
+ *  fading + growing in. At t=1 every dot sits exactly at its static position. */
+function drawDotsFrame(canvas: HTMLCanvasElement, dots: Dots, t: number) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#ffffff";
+  const scale = canvas.width / dots.srcW;
+  const rBase = ((CELL * scale) / 2) * DOT_FACTOR;
+  const TAU = Math.PI * 2;
+  for (let i = 0; i < dots.n; i++) {
+    const d = dots.delay[i];
+    const local = d >= 1 ? 0 : Math.min(1, Math.max(0, (t - d) / (1 - d)));
+    const inv = 1 - local;
+    const e = 1 - inv * inv * inv; // easeOutCubic per dot
+    const x = (dots.sx[i] + (dots.tx[i] - dots.sx[i]) * e) * scale;
+    const y = (dots.sy[i] + (dots.ty[i] - dots.sy[i]) * e) * scale;
+    const r = dots.g[i] * rBase * (0.45 + 0.55 * e);
+    if (r <= 0.05) continue;
+    ctx.globalAlpha = 0.12 + 0.88 * e; // faint when scattered → solid at rest
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, TAU);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
 /**
- * Halftone-dot hero portrait. `data-hero-portrait` marks the entrance target so
- * the About hero drives its fade+rise via `heroTitleIn` (in sync with the
- * nameplate). If the source PNG is missing/undecodable, a clearly-flagged
- * placeholder card stands in instead of crashing.
+ * Halftone-dot hero portrait. On mount the dots converge from scattered
+ * background positions and assemble the image, then settle into the exact crisp
+ * static render (the 4× buffer blit). Reduced motion skips the assembly and shows
+ * the final image immediately. If the source PNG is missing/undecodable, a
+ * clearly-flagged placeholder card stands in instead of crashing.
  */
 export function HalftonePortrait() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -196,24 +273,80 @@ export function HalftonePortrait() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     let cancelled = false;
-    let buffer: HTMLCanvasElement | null = null;
+    let buffer: HTMLCanvasElement | null = null; // crisp final image
+    let dots: Dots | null = null;
+    let settled = false;
     let lastKey = "";
+    let tween: gsap.core.Tween | null = null;
+    let fadeTween: gsap.core.Tween | null = null;
+    const reduce = prefersReducedMotion();
 
-    const paint = () => {
+    const sizeCanvas = () => {
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.round((canvas.clientWidth || 1) * dpr));
+      canvas.height = Math.max(1, Math.round((canvas.clientHeight || 1) * dpr));
+    };
+
+    // Blit the exact, crisp static image; cache the size so resize re-blits once.
+    const blitFinal = () => {
       if (!buffer || cancelled) return;
       const dpr = window.devicePixelRatio || 1;
       const key = `${canvas.clientWidth}x${canvas.clientHeight}@${dpr}`;
-      if (key === lastKey) return; // size unchanged → skip re-blit
+      if (key === lastKey) return;
       lastKey = key;
       blit(canvas, buffer);
+    };
+
+    // Settle: crossfade the crisp buffer over the assembled dots (same positions →
+    // a smooth "focus" instead of a pop), then hold the exact static image.
+    const settle = () => {
+      settled = true;
+      lastKey = "";
+      if (reduce || !dots || !buffer) {
+        blitFinal();
+        return;
+      }
+      const f = { a: 0 };
+      fadeTween = gsap.to(f, {
+        a: 1,
+        duration: 0.3,
+        ease: "power1.out",
+        onUpdate: () => {
+          if (!dots || !buffer) return;
+          drawDotsFrame(canvas, dots, 1);
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          ctx.globalAlpha = f.a;
+          ctx.drawImage(buffer, 0, 0, canvas.width, canvas.height);
+          ctx.globalAlpha = 1;
+        },
+        onComplete: () => {
+          lastKey = "";
+          blitFinal();
+        },
+      });
     };
 
     const img = new Image();
     img.onload = () => {
       if (cancelled) return;
       try {
-        buffer = renderDotBuffer(processImage(img));
-        paint();
+        const cells = processImage(img);
+        buffer = renderDotBuffer(cells); // the exact image the assembly settles into
+        if (reduce) {
+          settle(); // reduced motion: no assembly, show the final image
+          return;
+        }
+        dots = buildDots(cells);
+        sizeCanvas();
+        const p = { t: 0 };
+        tween = gsap.to(p, {
+          t: 1,
+          duration: ASSEMBLE_DURATION,
+          ease: "none", // per-dot easeOutCubic + stagger shapes the feel
+          onUpdate: () => dots && drawDotsFrame(canvas, dots, p.t),
+          onComplete: settle,
+        });
       } catch {
         setFailed(true);
       }
@@ -223,10 +356,17 @@ export function HalftonePortrait() {
     };
     img.src = SRC;
 
-    const ro = new ResizeObserver(() => paint());
+    // Only re-blit on resize once the assembly has settled; mid-animation resizes
+    // just adopt the new backing size on the next frame.
+    const ro = new ResizeObserver(() => {
+      if (settled) blitFinal();
+      else if (!reduce) sizeCanvas();
+    });
     ro.observe(canvas);
     return () => {
       cancelled = true;
+      tween?.kill();
+      fadeTween?.kill();
       ro.disconnect();
     };
   }, []);
