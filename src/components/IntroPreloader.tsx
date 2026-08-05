@@ -43,8 +43,10 @@ export function IntroPreloader() {
     const navLogo = document.querySelector<HTMLElement>("[data-nav-logo]");
     const reduce = prefersReducedMotion();
 
-    // Reduced motion (or no navbar logo to dock into): brief hold, then fade.
+    // Reduced motion (or no navbar logo to dock into): show the logo, brief hold,
+    // then fade — no wipe or shrink-travel.
     if (reduce || !navLogo) {
+      gsap.set(logo, { clipPath: "inset(0 0 0% 0)" });
       const tl = gsap.timeline({
         onComplete: () => {
           overlay.style.display = "none";
@@ -58,8 +60,14 @@ export function IntroPreloader() {
       };
     }
 
-    // Full intro: hold centered → shrink + dock into the navbar → clear the black.
-    const run = gsap.delayedCall(INTRO.hold, () => {
+    // Full intro: wipe the big logo in top→bottom, hold, then shrink + dock into
+    // the navbar while the black clears.
+    gsap.fromTo(
+      logo,
+      { clipPath: "inset(0 0 100% 0)" },
+      { clipPath: "inset(0 0 0% 0)", duration: INTRO.reveal, ease: "power2.out" },
+    );
+    const run = gsap.delayedCall(INTRO.reveal + INTRO.hold, () => {
       // Shrink + travel the logo onto the (settled) navbar logo.
       Flip.fit(logo, navLogo, { duration: INTRO.dock, ease: INTRO.ease, scale: true });
       // Reveal the page as it docks: fade only the black background (the logo
@@ -100,7 +108,10 @@ export function IntroPreloader() {
         ref={logoRef}
         src="/arif-logo.png"
         alt=""
-        className="h-28 w-28 object-contain sm:h-32 sm:w-32"
+        className="h-[min(52vmin,30rem)] w-[min(52vmin,30rem)] object-contain"
+        // Clipped from the first paint so the wipe-in reveals it top→bottom
+        // (the 500×500 asset stays crisp at this size).
+        style={{ clipPath: "inset(0 0 100% 0)" }}
       />
     </div>
   );

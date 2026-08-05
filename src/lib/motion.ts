@@ -109,7 +109,8 @@ export const STYLE_SHIFT = {
  * the shrink-into-navbar; `fade` the black clear; `ease` the dock curve.
  */
 export const INTRO = {
-  hold: 1.0, // s — logo centered before it docks
+  reveal: 0.6, // s — big logo wipes in top→bottom
+  hold: 0.5, // s — logo holds before it docks
   dock: 0.85, // s — shrink + travel into the navbar logo
   fade: 0.5, // s — black cover clears (page reveal)
   ease: "power4.inOut", // dock ease (matches the project-title Flip)
