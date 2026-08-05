@@ -32,7 +32,7 @@ import { useEffect, useRef, useState } from "react";
 const SRC = "/hero-portrait-cutout.png";
 
 // --- tuned constants (do not "improve" without re-tuning against the source) ---
-const CELL = 4; // source px per dot cell (finer grid = more, smaller dots → sharper)
+const CELL = 3; // source px per dot cell (finer grid = more, smaller dots → sharper)
 const ALPHA_MIN = 140; // skip cells whose avg alpha < ~55% (transparent bg)
 const CONTRAST = 1.4; // grayscale contrast multiplier
 const USM_RADIUS = 2; // unsharp-mask blur radius (px)
