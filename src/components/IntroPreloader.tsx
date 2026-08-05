@@ -106,14 +106,12 @@ export function IntroPreloader() {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         ref={logoRef}
-        src="/arif-logo.png"
+        src="/arif-logo.svg"
         alt=""
         className="h-[min(64vmin,36rem)] w-[min(64vmin,36rem)] object-contain"
-        // Clipped from the first paint so the wipe-in reveals it top→bottom.
-        // NOTE: the source is a 500×500 PNG — crisp to ~500px on standard screens
-        // but slightly soft above that / on hi-DPI. Swap in an SVG (or a ~1500px
-        // PNG) at /arif-logo.svg|png to go bigger and stay razor-sharp.
-        style={{ clipPath: "inset(0 0 100% 0)" }}
+        // Vector logo → razor-sharp at any size. Clipped from the first paint so
+        // the wipe-in reveals it top→bottom; will-change keeps that smooth.
+        style={{ clipPath: "inset(0 0 100% 0)", willChange: "clip-path, transform" }}
       />
     </div>
   );

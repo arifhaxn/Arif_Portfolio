@@ -14,7 +14,7 @@
 // the model up so it fills the viewport like the reference figure.
 // -----------------------------------------------------------------------------
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { navIntro } from "@/lib/animations";
@@ -39,8 +39,16 @@ export function Hero() {
     },
     { scope: root },
   );
+  // Defer the WebGL robot (its ~180ms EdgesGeometry build + shader compile would
+  // otherwise block the main thread and stutter the intro wipe). Mount it on
+  // reveal — it then scans in visibly with the rest of the entrance.
+  const [showRobot, setShowRobot] = useState(false);
   useEffect(
-    () => onReveal(() => navIntro("[data-hero-line]", 12)),
+    () =>
+      onReveal(() => {
+        navIntro("[data-hero-line]", 12);
+        setShowRobot(true);
+      }),
     [],
   );
 
@@ -61,8 +69,9 @@ export function Hero() {
       >
         <div className="relative aspect-square w-[100vmin] lg:aspect-auto lg:h-full lg:w-full">
           {/* zoom kept modest so the WHOLE robot stays in frame (the model is
-              normalized by its bounding sphere, so it only fills ~68% at zoom 1). */}
-          <HeroHead shape="robot" zoom={0.95} />
+              normalized by its bounding sphere, so it only fills ~68% at zoom 1).
+              Mounted only after the intro reveals — see showRobot above. */}
+          {showRobot && <HeroHead shape="robot" zoom={0.95} />}
         </div>
       </div>
 
