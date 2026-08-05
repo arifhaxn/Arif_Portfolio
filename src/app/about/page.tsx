@@ -18,8 +18,9 @@
 import { useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useGSAP } from "@/lib/gsap";
-import { floatLoop, marqueeLoop, scrollReveal } from "@/lib/animations";
+import { floatLoop, heroTitleIn, marqueeLoop, scrollReveal } from "@/lib/animations";
 import { ScrambleText } from "@/components/ScrambleText";
+import { HalftonePortrait } from "@/components/HalftonePortrait";
 import { CodingSince } from "@/components/Hud";
 import { CONTACT_EMAIL, CONTACT_TAGS, SKILLS, SOCIALS } from "@/lib/about";
 
@@ -34,6 +35,8 @@ export default function AboutPage() {
 
   useGSAP(
     () => {
+      // Hero portrait fades + rises in with the nameplate (shared hero timing).
+      heroTitleIn("[data-hero-portrait]");
       scrollReveal("[data-desc]", { y: 24 }, "top 85%");
       scrollReveal("[data-skill]", { y: 24 }, "top 88%");
       scrollReveal("[data-contact]", { y: 24 }, "top 88%");
@@ -55,19 +58,8 @@ export default function AboutPage() {
     <main ref={root} className="bg-black text-white">
       {/* ============================ 1 · HERO ============================= */}
       <section className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 pt-28 sm:px-10">
-        {/* Portrait placeholder — swap in a real image later. */}
-        <div
-          aria-hidden
-          className="relative aspect-[3/4] w-[clamp(15rem,38vmin,24rem)] overflow-hidden rounded-xl bg-gradient-to-br from-zinc-900 via-zinc-950 to-black ring-1 ring-white/15"
-        >
-          <div className="flex h-full w-full flex-col items-center justify-center gap-3">
-            <span className="font-mono text-6xl font-semibold text-white/10">AH</span>
-            <span className="h-px w-12 bg-blue-500" />
-            <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-zinc-600">
-              Portrait — placeholder
-            </span>
-          </div>
-        </div>
+        {/* Halftone-dot portrait (canvas, drawn once from the cutout PNG). */}
+        <HalftonePortrait />
 
         {/* Name (bottom-left, over the portrait), like the reference. */}
         <div className="pointer-events-none absolute bottom-24 left-6 text-left sm:bottom-28 sm:left-10">
