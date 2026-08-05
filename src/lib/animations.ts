@@ -18,11 +18,9 @@ import { gsap, ScrollTrigger, Observer, Flip } from "@/lib/gsap";
 import {
   ACHIEVE,
   ARM_BREATHE,
-  ASSEMBLE,
   DURATION,
   EASE,
   GALLERY,
-  HEAD_SCAN,
   OPACITY,
   PIXEL_REVEAL,
   PIXEL_SCRUB,
@@ -324,65 +322,6 @@ export function galleryZoomIn(figure: HTMLElement, start: string = START.gallery
 }
 
 // -----------------------------------------------------------------------------
-// HeroHead entry/exit scan (world-Y clipping-plane sweep)
-// -----------------------------------------------------------------------------
-
-/**
- * Drive a HeroHead's clipping-plane sweep by tweening a world-Y value and handing
- * it to `setClip` each frame (the caller maps y → plane offset; keep-above-Y).
- * `top`/`bottom` are the model's Y bounds (+margin). Geometry-bounds-based, so the
- * same helper works for any HeroHead shape.
- *
- *   • headScanIn — materialize: y sweeps top→bottom (reveals top-to-bottom).
- *   • headScanOut — erase: y sweeps bottom→top (clips away bottom-to-top).
- *
- * Reduced motion: snap to the end state (in → fully visible, out → fully hidden)
- * and fire onComplete immediately, so navigation gating isn't delayed.
- */
-export function headScanIn(
-  setClip: (y: number) => void,
-  top: number,
-  bottom: number,
-  onComplete?: () => void,
-): gsap.core.Tween {
-  if (prefersReducedMotion()) {
-    setClip(bottom);
-    onComplete?.();
-    return gsap.to({}, { duration: 0 });
-  }
-  const s = { y: top };
-  setClip(top);
-  return gsap.to(s, {
-    y: bottom,
-    duration: HEAD_SCAN.duration,
-    ease: HEAD_SCAN.ease,
-    onUpdate: () => setClip(s.y),
-    onComplete,
-  });
-}
-
-export function headScanOut(
-  setClip: (y: number) => void,
-  top: number,
-  bottom: number,
-  onComplete?: () => void,
-): gsap.core.Tween {
-  if (prefersReducedMotion()) {
-    setClip(top);
-    onComplete?.();
-    return gsap.to({}, { duration: 0 });
-  }
-  const s = { y: bottom };
-  return gsap.to(s, {
-    y: top,
-    duration: HEAD_SCAN.duration,
-    ease: HEAD_SCAN.ease,
-    onUpdate: () => setClip(s.y),
-    onComplete,
-  });
-}
-
-// -----------------------------------------------------------------------------
 // Marquee (seamless horizontal loop)
 // -----------------------------------------------------------------------------
 
@@ -525,25 +464,6 @@ export function armBreathe(target: { phase: number }): gsap.core.Tween {
     ease: "none",
     repeat: -1,
   });
-}
-
-/**
- * Robot assemble-in — advances a progress `v` 0→1 once over `ASSEMBLE.duration`.
- * HeroHead's crease-line vertex shader reads it: at 0 every vertex is scattered in
- * 3D, at 1 it's in the form (with a per-vertex stagger + fade), so the robot
- * particle-combines into place on mount. Reduced motion: snap to formed (v=1), no
- * animation. Returns the tween (kill on cleanup).
- */
-export function assembleIn(target: { v: number }): gsap.core.Tween {
-  if (prefersReducedMotion()) {
-    target.v = 1;
-    return gsap.to({}, { duration: 0 });
-  }
-  return gsap.fromTo(
-    target,
-    { v: 0 },
-    { v: 1, duration: ASSEMBLE.duration, ease: ASSEMBLE.ease },
-  );
 }
 
 /**
