@@ -20,6 +20,7 @@ import { useGSAP } from "@/lib/gsap";
 import { floatLoop, marqueeLoop, scrollReveal } from "@/lib/animations";
 import { ScrambleText } from "@/components/ScrambleText";
 import { HalftonePortrait } from "@/components/HalftonePortrait";
+import { HeroStatus } from "@/components/HeroStatus";
 import { CodingSince } from "@/components/Hud";
 import { CONTACT_EMAIL, CONTACT_TAGS, SKILLS, SOCIALS } from "@/lib/about";
 
@@ -81,6 +82,11 @@ export default function AboutPage() {
               Hasan
             </ScrambleText>
           </h1>
+        </div>
+
+        {/* Live status HUD — fills the right side (mid-right, right-aligned). */}
+        <div className="pointer-events-none absolute right-6 top-1/2 z-10 -translate-y-1/2 sm:right-10">
+          <HeroStatus />
         </div>
 
         {/* Scroll cue — animated sliding segment (same motion as the projects
