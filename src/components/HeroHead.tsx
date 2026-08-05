@@ -357,11 +357,12 @@ const POLY_STYLE = {
   renderAs: "wireframe" as const,
 };
 const ROBOT_STYLE = {
-  // ~13% dimmer than pure white/blue-300; on an additive material scaling color
-  // is equivalent to lowering opacity but survives the crossfade (which drives
-  // opacity 0↔1).
+  // Neutral silver, ~13% dimmer than pure white (on an additive material, scaling
+  // the color is equivalent to lowering opacity but survives the crossfade, which
+  // drives opacity 0↔1). Both copies share ONE tone: the blue Pose-B variant was
+  // removed, so the idle pose-crossfade no longer tints the robot blue.
   colorA: "#dedede",
-  colorB: "#80abdc",
+  colorB: "#dedede",
   additive: true,
   renderAs: "lines" as const,
 };
