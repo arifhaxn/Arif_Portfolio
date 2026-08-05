@@ -300,19 +300,21 @@ type Euler3 = [number, number, number];
 const ROBOT_EDGE_ANGLE_DEG = 15;
 
 // --- Back-facing eye-socket duplicate removal (surgical, tied to THIS mesh) ---
-// The head dome is see-through (intentional), so each front eye socket shows a
-// faint duplicate of the far/inner dome surface behind it. We drop ONLY those
-// back-dome segments inside a small disc at each eye — 18 segments (0.04% of the
-// model). The antenna (z > -0.13) and every other see-through edge (6.2K
-// back-facing segments elsewhere) are untouched, so global transparency is
-// unchanged. Coordinates are in the model's local space; re-derive with
-// scripts if robot.glb is ever replaced.
+// The head dome is see-through (intentional), so through each front eye ring you
+// also see the far/inner dome surface behind it, which carries a duplicate eye
+// ring. We drop ONLY those back rings: within a small (x,y) disc at each eye, any
+// crease segment on the back half (z < EYE_BACK_Z) is removed. Verified against
+// the mesh — at each eye the segments split cleanly into a FRONT rim (z ≈ +0.35..
+// +0.40, kept) and a BACK rim (z ≈ -0.35..-0.40, dropped) with NOTHING in between,
+// so the cut can't nick the front eye or any other geometry. ~250 segments drop
+// per eye. Coordinates are the model's local space (eye centroids ≈ (±0.12, 0.40));
+// re-derive with scripts/ if robot.glb is ever replaced.
 const EYE_CENTERS: [number, number][] = [
-  [-0.2, 0.73],
-  [0.2, 0.73],
+  [-0.12, 0.4],
+  [0.12, 0.4],
 ];
-const EYE_RADIUS = 0.11; // (x,y) disc around each eye
-const EYE_BACK_Z = -0.15; // segments behind this (inner/far dome) are the duplicate
+const EYE_RADIUS = 0.09; // (x,y) disc around each eye — covers the ring + margin
+const EYE_BACK_Z = 0; // drop the back half of the disc (front rim sits far ahead at z≈+0.37)
 
 /** Return a new line geometry with the back-dome eye duplicates removed. */
 function stripEyeBackDuplicates(edges: BufferGeometry): BufferGeometry {
