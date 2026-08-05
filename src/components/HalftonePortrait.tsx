@@ -175,10 +175,14 @@ export function HalftonePortrait() {
   }, []);
 
   return (
+    // Sized LARGE on purpose: at the old ~315px the browser downsampled the
+    // 1884px dot canvas ~6× and blurred the fine dots into muddy grey. Height-
+    // based so it stays a tall, prominent portrait; ~600–680px on desktop keeps
+    // the downscale ≲3× so the dots read crisp + bright (like the tuned source).
     <div
       data-hero-portrait
       aria-hidden
-      className="relative aspect-[471/530] w-[clamp(15rem,38vmin,24rem)]"
+      className="relative aspect-[471/530] h-[clamp(20rem,82vmin,48rem)]"
     >
       {failed ? (
         // Fallback: the original placeholder card, clearly flagged.
