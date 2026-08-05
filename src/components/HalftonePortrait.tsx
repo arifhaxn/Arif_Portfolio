@@ -29,7 +29,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { gsap } from "@/lib/gsap";
-import { prefersReducedMotion } from "@/lib/animations";
+import { floatLoop, prefersReducedMotion } from "@/lib/animations";
 
 const SRC = "/hero-portrait-cutout.png";
 
@@ -50,6 +50,7 @@ const DOT_FACTOR = 1.0; // radius scale within the cell
 const ASSEMBLE_DURATION = 1.8; // s — total convergence time
 const ASSEMBLE_STAGGER = 0.45; // max per-dot start delay (fraction of duration)
 const SCATTER_OVERSCAN = 0.15; // dots start spread across the box + this margin
+const IDLE_FLOAT = 10; // px — subtle up/down hover once assembled
 const MIN_RADIUS = 0.5; // drop dots below this radius at the reference scale
 const REF_SCALE = 4; // the tuned reference output scale (dot-set + max render res)
 
@@ -266,6 +267,7 @@ function drawDotsFrame(canvas: HTMLCanvasElement, dots: Dots, t: number) {
  * clearly-flagged placeholder card stands in instead of crashing.
  */
 export function HalftonePortrait() {
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [failed, setFailed] = useState(false);
 
@@ -279,7 +281,14 @@ export function HalftonePortrait() {
     let lastKey = "";
     let tween: gsap.core.Tween | null = null;
     let fadeTween: gsap.core.Tween | null = null;
+    let idleTween: gsap.core.Tween | gsap.core.Timeline | null = null;
     const reduce = prefersReducedMotion();
+
+    // Subtle up/down hover once the portrait has assembled (reduced-motion safe).
+    const startIdle = () => {
+      if (cancelled || !wrapperRef.current) return;
+      idleTween = floatLoop(wrapperRef.current, IDLE_FLOAT);
+    };
 
     const sizeCanvas = () => {
       const dpr = window.devicePixelRatio || 1;
@@ -304,6 +313,7 @@ export function HalftonePortrait() {
       lastKey = "";
       if (reduce || !dots || !buffer) {
         blitFinal();
+        startIdle();
         return;
       }
       const f = { a: 0 };
@@ -323,6 +333,7 @@ export function HalftonePortrait() {
         onComplete: () => {
           lastKey = "";
           blitFinal();
+          startIdle();
         },
       });
     };
@@ -367,6 +378,7 @@ export function HalftonePortrait() {
       cancelled = true;
       tween?.kill();
       fadeTween?.kill();
+      idleTween?.kill();
       ro.disconnect();
     };
   }, []);
@@ -375,9 +387,10 @@ export function HalftonePortrait() {
     // Tall, prominent portrait; the parent centers it in the hero. Dots stay
     // crisp + bright at any size via the 4× buffer → quality downscale (header).
     <div
+      ref={wrapperRef}
       data-hero-portrait
       aria-hidden
-      className="relative aspect-[471/530] h-[clamp(22rem,88vmin,52rem)]"
+      className="relative aspect-[471/530] h-[clamp(22rem,88vmin,52rem)] will-change-transform"
     >
       {failed ? (
         // Fallback: the original placeholder card, clearly flagged.
