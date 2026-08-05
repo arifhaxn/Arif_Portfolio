@@ -102,6 +102,20 @@ export const STYLE_SHIFT = {
 } as const;
 
 /**
+ * Landing intro preloader (see `IntroPreloader` + `introControl`). On the first
+ * load of `/`, a full-screen black cover shows the logo centered/large, holds,
+ * then shrinks + docks it into the navbar's logo slot (GSAP `Flip.fit`) while the
+ * black clears and the hero entrance fires. `hold` is the centered pause; `dock`
+ * the shrink-into-navbar; `fade` the black clear; `ease` the dock curve.
+ */
+export const INTRO = {
+  hold: 1.0, // s — logo centered before it docks
+  dock: 0.85, // s — shrink + travel into the navbar logo
+  fade: 0.5, // s — black cover clears (page reveal)
+  ease: "power4.inOut", // dock ease (matches the project-title Flip)
+} as const;
+
+/**
  * Robot idle arm-breathe (see `armBreathe` + HeroHead's shoulder-pivot vertex
  * displacement). The About/Hero robot is a single fused mesh — no separate arm
  * nodes — so the lower-arm vertices are swung about a fixed shoulder pivot in a
@@ -200,16 +214,35 @@ export const GALLERY = {
 } as const;
 
 /**
- * Next-project chain (see NextProjectChain). After the gallery, a spacer of
- * `runway` gives scroll room "past the end"; scrolling through it fills a ~ringSize
- * ring (0→100) that follows the cursor (fixed bottom-center on touch). At 100 it
- * chains into the next project; scrolling back up reverses and cancels.
+ * Next-project chain (see NextProjectChain). After the gallery a spacer of
+ * `runway` gives breathing room; once you scroll to the end, a fixed bottom-center
+ * ring (~ringSize) AUTO-COUNTS 0→100 on its own over `countDuration` (not driven by
+ * scroll) and then chains into the next project. Scrolling back up before it
+ * completes reverses the count and fades it out.
  */
 export const NEXT_PROJECT = {
-  runway: "85vh", // spacer scroll distance beyond the content's end
+  runway: "60vh", // spacer breathing room past the content's end
+  countDuration: 3.4, // s — auto-count 0→100 once the end is reached
   ringSize: 96, // ring diameter (px)
   ringStroke: 3, // ring stroke width (px)
   fadeIn: 0.12, // progress at which the indicator reaches full opacity
+} as const;
+
+/**
+ * HeroHead entry/exit scan (see HeroHead + `headScanIn`/`headScanOut`). A world-Y
+ * clipping plane sweeps through the model to materialize (top→bottom) / erase
+ * (bottom→top) it over `duration`. `margin` is extra world units beyond the model
+ * radius so the sweep fully clears it. The rim* tokens size the conservative
+ * first-pass glow strip at the sweep line (the advanced stencil/glitch rim is a
+ * later pass). Reduced motion skips the scan entirely.
+ */
+export const HEAD_SCAN = {
+  duration: 1.2, // s — entry/exit sweep (spec range 1–1.5s)
+  ease: "power2.inOut",
+  margin: 0.2, // world units beyond the model radius
+  rimWidthFactor: 1.7, // rim strip width = model radius × this
+  rimThickness: 0.035, // rim strip world-Y thickness
+  rimOpacity: 0.6, // additive rim opacity (first-pass)
 } as const;
 
 export const SCRAMBLE = {

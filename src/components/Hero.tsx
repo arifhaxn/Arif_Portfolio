@@ -14,10 +14,11 @@
 // the model up so it fills the viewport like the reference figure.
 // -----------------------------------------------------------------------------
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
-import { useGSAP } from "@/lib/gsap";
+import { gsap, useGSAP } from "@/lib/gsap";
 import { navIntro } from "@/lib/animations";
+import { onReveal } from "@/lib/introControl";
 import { LiveStatus } from "@/components/Hud";
 import { ScrambleText } from "@/components/ScrambleText";
 import { SOCIALS } from "@/lib/about";
@@ -30,11 +31,17 @@ const HeroHead = dynamic(
 export function Hero() {
   const root = useRef<HTMLElement>(null);
 
+  // Keep the nameplate hidden until the intro reveals the page, so the fade/rise
+  // + scramble entrance plays IN VIEW rather than behind the preloader cover.
   useGSAP(
     () => {
-      navIntro("[data-hero-line]", 12, { delay: 0.2 });
+      gsap.set("[data-hero-line]", { opacity: 0 });
     },
     { scope: root },
+  );
+  useEffect(
+    () => onReveal(() => navIntro("[data-hero-line]", 12)),
+    [],
   );
 
   return (

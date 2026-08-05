@@ -15,10 +15,13 @@
 // -----------------------------------------------------------------------------
 
 import { useRef } from "react";
+import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useGSAP } from "@/lib/gsap";
 import { navIntro } from "@/lib/animations";
 import { ScrambleText } from "@/components/ScrambleText";
+import { useHeadScan } from "@/components/providers/HeadScanProvider";
 
 // Navbar is global (root layout), so the homepage-section links use a "/#anchor"
 // form: from any route a native <Link> navigates HOME and then scrolls to the
@@ -38,6 +41,18 @@ const RIGHT_LINKS = [
 
 export function Navbar() {
   const root = useRef<HTMLElement>(null);
+  const router = useRouter();
+  const headScan = useHeadScan();
+
+  // If a HeroHead is mounted on the current page, play its exit scan before
+  // navigating; otherwise navigate immediately (default <Link> behavior).
+  const handleNav = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    // Let modified clicks (new tab, etc.) behave natively.
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    if (!headScan.hasMounted()) return;
+    e.preventDefault();
+    void headScan.playExitAll().then(() => router.push(href));
+  };
 
   useGSAP(
     () => {
@@ -51,10 +66,7 @@ export function Navbar() {
   return (
     <header
       ref={root}
-      // bg + backdrop-blur: the nav is fixed and content scrolls beneath it —
-      // without a backdrop, wireframe edges from the 3D canvases show through
-      // between the links and read as stray diagonal lines across the nav.
-      className="fixed inset-x-0 top-0 z-50 flex items-center justify-between bg-black/70 px-6 py-5 backdrop-blur-md sm:px-10"
+      className="fixed inset-x-0 top-0 z-50 flex items-center justify-between px-6 py-5 sm:px-10"
     >
       {/* Left corner — Contact, About */}
       <nav className="flex items-center gap-6 sm:gap-8">
@@ -63,6 +75,7 @@ export function Navbar() {
             key={link.href}
             data-nav-item
             href={link.href}
+            onClick={(e) => handleNav(e, link.href)}
             className="text-xs font-medium uppercase tracking-[0.15em] text-zinc-400 transition-colors hover:text-white sm:text-sm"
           >
             {/* Entrance driven by navIntro (data-nav-item); hover replays. */}
@@ -76,9 +89,19 @@ export function Navbar() {
       <Link
         data-nav-item
         href="/"
-        className="absolute left-1/2 -translate-x-1/2 text-sm font-semibold tracking-[0.2em] text-white"
+        aria-label="Home"
+        onClick={(e) => handleNav(e, "/")}
+        className="absolute left-1/2 -translate-x-1/2"
       >
-        AH
+        <Image
+          data-nav-logo
+          src="/arif-logo.png"
+          alt="Arif Hasan"
+          width={56}
+          height={56}
+          priority
+          className="h-11 w-11 object-contain"
+        />
       </Link>
 
       {/* Right corner — Projects, Achievements */}
@@ -88,6 +111,7 @@ export function Navbar() {
             key={link.href}
             data-nav-item
             href={link.href}
+            onClick={(e) => handleNav(e, link.href)}
             className="text-xs font-medium uppercase tracking-[0.15em] text-zinc-400 transition-colors hover:text-white sm:text-sm"
           >
             {/* Entrance driven by navIntro (data-nav-item); hover replays. */}
