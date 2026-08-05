@@ -108,9 +108,11 @@ export function IntroPreloader() {
         ref={logoRef}
         src="/arif-logo.png"
         alt=""
-        className="h-[min(52vmin,30rem)] w-[min(52vmin,30rem)] object-contain"
-        // Clipped from the first paint so the wipe-in reveals it top→bottom
-        // (the 500×500 asset stays crisp at this size).
+        className="h-[min(64vmin,36rem)] w-[min(64vmin,36rem)] object-contain"
+        // Clipped from the first paint so the wipe-in reveals it top→bottom.
+        // NOTE: the source is a 500×500 PNG — crisp to ~500px on standard screens
+        // but slightly soft above that / on hi-DPI. Swap in an SVG (or a ~1500px
+        // PNG) at /arif-logo.svg|png to go bigger and stay razor-sharp.
         style={{ clipPath: "inset(0 0 100% 0)" }}
       />
     </div>
