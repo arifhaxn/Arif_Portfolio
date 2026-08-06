@@ -61,6 +61,7 @@ import {
   styleShift,
 } from "@/lib/animations";
 import { ARM_BREATHE, HEAD_SCAN } from "@/lib/motion";
+import { onReveal } from "@/lib/introControl";
 
 // -----------------------------------------------------------------------------
 // ▶ ROBOT ARM-BREATHE (Path B) — shoulder-pivot vertex sway for the fused mesh.
@@ -516,6 +517,7 @@ function ShapeMeshes({
   spin = 0,
   zoom = 1,
   arms = false,
+  scanOnReveal = false,
 }: {
   /** Style A geometry — line set (robot) or wireframe mesh (icosahedron). */
   geometry: BufferGeometry;
@@ -532,6 +534,8 @@ function ShapeMeshes({
   zoom?: number;
   /** Enable the shoulder-pivot arm-breathe sway (robot only — it has arms). */
   arms?: boolean;
+  /** Start the scan-in on the intro reveal instead of on mount (landing robot). */
+  scanOnReveal?: boolean;
 }) {
   const group = useRef<Group>(null);
   // Style A material refs. Robot → ShaderMaterial (crease lines, displacing);
@@ -632,14 +636,26 @@ function ShapeMeshes({
     };
   }, [arms, reduce]);
 
-  // Scan-in on mount: sweep `scan.v` 0→1 (robot, motion allowed).
+  // Scan-in: sweep `scan.v` 0→1 (robot, motion allowed). The landing robot
+  // (`scanOnReveal`) is mounted early but starts its sweep on the intro reveal so
+  // it's in sync with the hero text; elsewhere it sweeps on mount.
   useEffect(() => {
     if (!arms || reduce) return;
-    const tw = headScanIn(scan.current);
+    let tw: ReturnType<typeof headScanIn> | null = null;
+    if (scanOnReveal) {
+      const off = onReveal(() => {
+        tw = headScanIn(scan.current);
+      });
+      return () => {
+        off();
+        tw?.kill();
+      };
+    }
+    tw = headScanIn(scan.current);
     return () => {
-      tw.kill();
+      tw?.kill();
     };
-  }, [arms, reduce]);
+  }, [arms, reduce, scanOnReveal]);
 
   // Each frame: slow auto-spin + mouse look-at on the group, and the combined
   // pose × style opacity on Style A materials / the halftone opacity on Style B.
@@ -807,10 +823,12 @@ function RobotShape({
   tilt,
   spin = 0,
   zoom = 1,
+  scanOnReveal = false,
 }: {
   tilt: React.RefObject<{ x: number; y: number }>;
   spin?: number;
   zoom?: number;
+  scanOnReveal?: boolean;
 }) {
   const { scene } = useGLTF("/robot.glb");
 
@@ -867,6 +885,7 @@ function RobotShape({
       spin={spin}
       zoom={zoom}
       arms // robot has arms → enable the shoulder-pivot breathe sway
+      scanOnReveal={scanOnReveal}
     />
   );
 }
@@ -875,12 +894,16 @@ export function HeroHead({
   shape = "icosahedron",
   spin = 0,
   zoom = 1,
+  scanOnReveal = false,
 }: {
   shape?: HeadShape;
   /** Continuous slow auto-spin about Y (radians/sec). Mouse tilt still applies. */
   spin?: number;
   /** Scale multiplier so the model fills more of its canvas (1 = default fit). */
   zoom?: number;
+  /** Start the robot scan-in on the intro reveal (landing) instead of on mount,
+   *  so it syncs with the hero text. Robot only. */
+  scanOnReveal?: boolean;
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
   const [inView, setInView] = useState(true);
@@ -924,7 +947,7 @@ export function HeroHead({
       >
         <Suspense fallback={null}>
           {shape === "robot" ? (
-            <RobotShape tilt={tilt} spin={spin} zoom={zoom} />
+            <RobotShape tilt={tilt} spin={spin} zoom={zoom} scanOnReveal={scanOnReveal} />
           ) : (
             <PolyShape tilt={tilt} spin={spin} zoom={zoom} />
           )}

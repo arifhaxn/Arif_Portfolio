@@ -30,6 +30,11 @@ export function claimIntro(pathname: string): boolean {
   return play;
 }
 
+/** Whether the page has already revealed (no intro pending). */
+export function isRevealed(): boolean {
+  return revealed;
+}
+
 /** Reveal the page — fire every pending `onReveal` callback (idempotent). */
 export function reveal(): void {
   if (revealed) return;

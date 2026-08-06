@@ -20,7 +20,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { navIntro } from "@/lib/animations";
-import { onReveal } from "@/lib/introControl";
+import { INTRO } from "@/lib/motion";
+import { isRevealed, onReveal } from "@/lib/introControl";
 import { LiveStatus } from "@/components/Hud";
 import { ScrambleText } from "@/components/ScrambleText";
 import { useHeadScan } from "@/components/providers/HeadScanProvider";
@@ -53,18 +54,20 @@ export function Hero() {
     },
     { scope: root },
   );
-  // Defer the WebGL robot (its ~180ms EdgesGeometry build + shader compile would
-  // otherwise block the main thread and stutter the intro wipe). Mount it on
-  // reveal — it then scans in visibly with the rest of the entrance.
-  const [showRobot, setShowRobot] = useState(false);
-  useEffect(
-    () =>
-      onReveal(() => {
-        navIntro("[data-hero-line]", 12);
-        setShowRobot(true);
-      }),
-    [],
-  );
+  // Nameplate + HUD scramble/fade in the moment the page reveals.
+  useEffect(() => onReveal(() => navIntro("[data-hero-line]", 12)), []);
+
+  // Mount the robot during the intro's STATIC hold (just after the logo wipe) so
+  // its heavy ~180ms WebGL build lands while nothing's animating — no wipe
+  // stutter — yet it's built and ready to SCAN the instant the page reveals, in
+  // sync with the text (the scan itself is gated on reveal via `scanOnReveal`).
+  // No intro (SPA return / reduced) → mount right away (lazy initial state).
+  const [showRobot, setShowRobot] = useState<boolean>(isRevealed);
+  useEffect(() => {
+    if (showRobot) return;
+    const t = window.setTimeout(() => setShowRobot(true), INTRO.reveal * 1000);
+    return () => window.clearTimeout(t);
+  }, [showRobot]);
 
   return (
     <section
@@ -85,7 +88,7 @@ export function Hero() {
           {/* zoom kept modest so the WHOLE robot stays in frame (the model is
               normalized by its bounding sphere, so it only fills ~68% at zoom 1).
               Mounted only after the intro reveals — see showRobot above. */}
-          {showRobot && <HeroHead shape="robot" zoom={0.95} />}
+          {showRobot && <HeroHead shape="robot" zoom={0.95} scanOnReveal />}
         </div>
       </div>
 
