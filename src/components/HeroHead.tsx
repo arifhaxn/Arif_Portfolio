@@ -55,11 +55,12 @@ import {
 import {
   armBreathe,
   headPointerTilt,
+  headScanIn,
   idlePoseSwap,
   prefersReducedMotion,
   styleShift,
 } from "@/lib/animations";
-import { ARM_BREATHE } from "@/lib/motion";
+import { ARM_BREATHE, HEAD_SCAN } from "@/lib/motion";
 
 // -----------------------------------------------------------------------------
 // ▶ ROBOT ARM-BREATHE (Path B) — shoulder-pivot vertex sway for the fused mesh.
@@ -111,6 +112,31 @@ const ARM_BREATHE_GLSL = /* glsl */ `
 const ARM_SWAY_RAD = MathUtils.degToRad(ARM_BREATHE.swayDeg);
 
 // -----------------------------------------------------------------------------
+// ▶ ROBOT SCAN-IN — entry materialize. A horizontal line sweeps top→bottom (as
+// uScan goes 0→1); the crease lines above the line are revealed, below it are
+// hidden, and a bright white RIM glows right at the line, so the robot reads as
+// being "printed"/scanned into existence. `computeScan` derives, from a vertex's
+// model-local y, a reveal alpha (`vReveal`) + the leading-edge rim (`vRim`),
+// passed to the fragment. uScan stays 1 (fully shown) for reduced motion / the
+// icosahedron; the robot tweens it 0→1 on mount via `headScanIn`.
+// -----------------------------------------------------------------------------
+const SCAN_GLSL = /* glsl */ `
+  uniform float uScan;    // 0 = nothing revealed → 1 = fully revealed
+  varying float vReveal;  // 0..1 reveal alpha (top→bottom sweep)
+  varying float vRim;     // bright leading-edge glow at the sweep line
+  const float SCAN_TOP  =  1.08; // model-local y just above the head
+  const float SCAN_BOT  = -1.08; // just below the feet
+  const float SCAN_BAND =  0.12; // reveal softness below the line
+  const float SCAN_RIM  =  0.05; // rim half-thickness
+  void computeScan(vec3 p) {
+    if (uScan >= 1.0) { vReveal = 1.0; vRim = 0.0; return; }
+    float scanY = mix(SCAN_TOP, SCAN_BOT, uScan);        // sweeps top→bottom
+    vReveal = smoothstep(scanY, scanY + SCAN_BAND, p.y); // above the line → revealed
+    vRim = 1.0 - smoothstep(0.0, SCAN_RIM, abs(p.y - scanY));
+  }
+`;
+
+// -----------------------------------------------------------------------------
 // Robot crease-line shader (Style A). The crease edges are drawn with an EXPLICIT
 // shader material — not lineBasicMaterial — so the exact same `applyArmBreathe`
 // vertex displacement as the halftone runs on the lines too (both styles must
@@ -121,7 +147,9 @@ const ARM_SWAY_RAD = MathUtils.degToRad(ARM_BREATHE.swayDeg);
 // -----------------------------------------------------------------------------
 const LINE_VERTEX = /* glsl */ `
   ${ARM_BREATHE_GLSL}
+  ${SCAN_GLSL}
   void main() {
+    computeScan(position); // reveal + rim from the original model y
     vec3 armPos = applyArmBreathe(position);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(armPos, 1.0);
   }
@@ -129,9 +157,13 @@ const LINE_VERTEX = /* glsl */ `
 const LINE_FRAGMENT = /* glsl */ `
   uniform vec3 uColor;
   uniform float uOpacity;
+  varying float vReveal;
+  varying float vRim;
   void main() {
-    if (uOpacity <= 0.001) discard;
-    gl_FragColor = vec4(uColor, uOpacity);
+    float a = uOpacity * clamp(vReveal + vRim, 0.0, 1.0); // hide below the sweep; rim lifts the edge
+    if (a <= 0.001) discard;
+    vec3 col = mix(uColor, vec3(1.0), vRim * 0.9); // bright white leading edge
+    gl_FragColor = vec4(col, a);
   }
 `;
 
@@ -152,6 +184,14 @@ function writeArmSway(m: MeshBasicMaterial | ShaderMaterial | null, amp: number,
   if (!uArmAmp || !uArmPhase) return;
   uArmAmp.value = amp;
   uArmPhase.value = phase;
+}
+
+/** Write the scan-in progress (0→1) to a material carrying `uScan` (the robot's
+ *  crease-line shaders). No-op for anything else. */
+function writeScan(m: MeshBasicMaterial | ShaderMaterial | null, v: number) {
+  if (!(m instanceof ShaderMaterial)) return;
+  const u = m.uniforms.uScan;
+  if (u) u.value = v;
 }
 
 // -----------------------------------------------------------------------------
@@ -520,6 +560,15 @@ function ShapeMeshes({
     [],
   );
 
+  // Scan-in (robot crease lines only). `scan.v` tweens 0→1 on mount; the line
+  // shader sweeps the reveal top→bottom. Seeded per Style-A line material; starts
+  // hidden (0) for the robot, fully revealed (1) otherwise / reduced motion.
+  const scan = useRef({ v: arms && !reduce ? 0 : 1 });
+  const scanUniforms = useMemo(
+    () => ({ uScan: { value: arms && !reduce ? 0 : 1 } }),
+    [arms, reduce],
+  );
+
   // Pose cross-fade drives these plain values (not the materials directly), so
   // the separate STYLE cross-fade can multiply on top without a GSAP conflict.
   const poseOpA = useRef({ opacity: 1 });
@@ -543,28 +592,50 @@ function ShapeMeshes({
   // Style A crease-line uniforms (robot). Own color + pose-crossfade opacity, plus
   // the arm-sway uniforms (seeded here, written per-frame by `writeArmSway`).
   const lineUniformsA = useMemo(
-    () => ({ uColor: { value: new Color(style.colorA) }, uOpacity: { value: 1 }, ...armUniforms }),
-    [armUniforms, style.colorA],
+    () => ({
+      uColor: { value: new Color(style.colorA) },
+      uOpacity: { value: 1 },
+      ...armUniforms,
+      ...scanUniforms,
+    }),
+    [armUniforms, scanUniforms, style.colorA],
   );
   const lineUniformsB = useMemo(
-    () => ({ uColor: { value: new Color(style.colorB) }, uOpacity: { value: 0 }, ...armUniforms }),
-    [armUniforms, style.colorB],
+    () => ({
+      uColor: { value: new Color(style.colorB) },
+      uOpacity: { value: 0 },
+      ...armUniforms,
+      ...scanUniforms,
+    }),
+    [armUniforms, scanUniforms, style.colorB],
   );
 
-  // Pose cross-fade (short cycle) + style shift (long cycle) run alongside.
+  // Pose cross-fade (short cycle) + style shift (long cycle) run alongside. On the
+  // robot, hold the style shift until the scan-in finishes so the halftone (Style
+  // B) doesn't appear mid-sweep — only the crease lines scan in.
   useEffect(() => {
     const poseTl = idlePoseSwap(poseOpA.current, poseOpB.current);
     const styleTl = styleShift(styleMix.current);
+    if (arms && !reduce) styleTl.delay(HEAD_SCAN.duration);
     return () => {
       poseTl.kill();
       styleTl.kill();
     };
-  }, []);
+  }, [arms, reduce]);
 
   // Drive the breathe phase on the shared GSAP ticker (robot, motion allowed).
   useEffect(() => {
     if (!arms || reduce) return;
     const tw = armBreathe(armPhase.current);
+    return () => {
+      tw.kill();
+    };
+  }, [arms, reduce]);
+
+  // Scan-in on mount: sweep `scan.v` 0→1 (robot, motion allowed).
+  useEffect(() => {
+    if (!arms || reduce) return;
+    const tw = headScanIn(scan.current);
     return () => {
       tw.kill();
     };
@@ -597,6 +668,13 @@ function ShapeMeshes({
     writeArmSway(matA.current, amp, phase);
     writeArmSway(matB.current, amp, phase);
     writeArmSway(halftoneMat.current, amp, phase);
+
+    // Scan-in progress → the crease-line shaders (robot only).
+    if (arms) {
+      const sv = scan.current.v;
+      writeScan(matA.current, sv);
+      writeScan(matB.current, sv);
+    }
   });
 
   const blending = style.additive ? AdditiveBlending : NormalBlending;

@@ -20,6 +20,7 @@ import {
   ARM_BREATHE,
   DURATION,
   EASE,
+  HEAD_SCAN,
   GALLERY,
   OPACITY,
   PIXEL_REVEAL,
@@ -464,6 +465,25 @@ export function armBreathe(target: { phase: number }): gsap.core.Tween {
     ease: "none",
     repeat: -1,
   });
+}
+
+/**
+ * Robot scan-in — sweeps a reveal `v` 0→1 once over `HEAD_SCAN.duration`.
+ * HeroHead's crease-line shader reads it: a horizontal line sweeps top→bottom,
+ * materializing the model as it passes, with a bright white leading rim. Reduced
+ * motion: snap to fully revealed (v=1), no sweep. Returns the tween (kill on
+ * cleanup).
+ */
+export function headScanIn(target: { v: number }): gsap.core.Tween {
+  if (prefersReducedMotion()) {
+    target.v = 1;
+    return gsap.to({}, { duration: 0 });
+  }
+  return gsap.fromTo(
+    target,
+    { v: 0 },
+    { v: 1, duration: HEAD_SCAN.duration, ease: HEAD_SCAN.ease },
+  );
 }
 
 /**
