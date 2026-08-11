@@ -85,7 +85,9 @@ export const ACHIEVE = {
   introSweep: 0.85, // total top-to-bottom stagger spread (s)
   introJitter: 0.12, // random per-cell delay → chunky "rendering" scatter
   // Opened-card modal.
-  pixelBlockEach: 0.004, // per-tile stagger of the modal pixel-block dissolve
+  pixelBlockEach: 0.0004, // per-tile stagger of the modal pixel-block dissolve
+  // (fine grid → many more tiles, so this is scaled down from the old 0.004 to
+  // hold the overall dissolve duration roughly constant)
   tiltMax: 9, // opened-card mouse-tilt max rotation (deg)
 } as const;
 
@@ -203,6 +205,59 @@ export const PIXEL_SCRUB = {
 } as const;
 
 /**
+ * About intro → description transition (see AboutPage + `aboutCurtainRise`). The
+ * portrait screen pins in place while a "curtain" — a jagged panel skyline sitting
+ * on TOP of the description content — rises over it, dragging the description up
+ * directly behind the panels (no gap). Progress-driven (scrubbed to the pinned
+ * scroll distance), like `pixelScrubReveal`.
+ *
+ * `widths` are the panels' fractions of the viewport width (must sum to 1) — an
+ * intentionally UNEVEN split, laid out with flexbox. `heights` are per-panel band
+ * fractions → a jagged static skyline. `stagger` gives each panel a small extra
+ * rise-lag (fraction of the viewport, eased out to 0 by the end) so they DON'T
+ * climb in lockstep — the tops appear unequally as they first rise, then settle
+ * flush on the description's top edge. `bandVh` is the band height; `litTo` the
+ * lit-face cutoff; `darkPeak` the overlay dimming the still-visible portrait;
+ * `runway` the pinned scroll distance. Reduced motion / mobile skip the mechanism.
+ */
+export const ABOUT_PANEL = {
+  // The transition is a "curtain": a jagged panel skyline sits on TOP of the
+  // description content, and the whole curtain rises over the pinned portrait
+  // screen — so the description is dragged up directly behind the panels (no gap).
+  widths: [0.2, 0.2, 0.2, 0.2, 0.2], // equal panel widths (Σ = 1), flex-laid
+  heights: [0.68, 1.0, 0.48, 0.9, 0.6], // per-panel height (fraction of band) → jagged skyline (wide spread)
+  stagger: [0.0, 0.12, 0.035, 0.15, 0.065], // per-panel rise-lag (fraction of vh), eased to 0 → unequal appearance
+  bandVh: 0.42, // panel-band height as a fraction of the viewport
+  // Each panel's fill is a lit "building" face down to `litTo`, then PURE BLACK —
+  // invisible against the black description below it, so its base blends seamlessly.
+  litTo: 0.5, // fraction of panel height that's the lit face before going black
+  darkPeak: 0.85, // overlay dimming the still-visible portrait above the rising curtain
+  runway: "+=115%", // pinned scroll distance (pin starts when the portrait tops out)
+} as const;
+
+/**
+ * Liquid-fill button (see LiquidButton + `liquidFillTimeline`/`liquidDroplet`). A
+ * cream pill with a black circular arrow badge; on hover/press the badge floods
+ * horizontally (width tween, pill corners throughout) to fill the whole button
+ * black while the label crossfades dark→white, and a small droplet detaches below
+ * the badge and falls. `fill` is the flood duration; `droplet` the detach-fall;
+ * `dropFall` how far it drops; `textOff`/`textOn` the label colours (rest → filled).
+ */
+export const LIQUID = {
+  fill: 0.5, // flood expand / retract duration (s)
+  ease: "power3.inOut",
+  labelFade: 0.32, // label colour crossfade (kept a touch shorter than the flood)
+  droplet: 0.38, // droplet detach-and-fall duration (s)
+  dropEase: "power1.in",
+  dropFall: 16, // px the droplet falls as it fades
+  dropOpacity: 0.9, // droplet start opacity
+  textOff: "#0a0a0a", // label colour at rest (dark on cream)
+  textOn: "#ffffff", // label colour when filled (white on black)
+  cream: "#ece7df", // pill background — the site's established light tone
+  ink: "#0a0a0a", // badge / fill / droplet colour (black, replacing the ref's orange)
+} as const;
+
+/**
  * Gallery zoom-in reveal (see ProjectCaseStudy + `galleryZoomIn`). Each image
  * starts slightly smaller and grows to rest as it scrolls in (reads as zooming
  * toward rest, not away), then its caption fades up once the zoom settles.
@@ -288,6 +343,36 @@ export const START = {
 /** Opacity levels that recur across the spec. */
 export const OPACITY = {
   ghostPeak: 0.06, // About ghost-text max opacity
+} as const;
+
+/**
+ * Custom cursor dot — a small white dot that eases toward the real pointer each
+ * frame (`cursorChase`), replacing the native cursor on fine-pointer devices.
+ */
+export const CURSOR = {
+  size: 14, // px diameter of the white dot
+  ease: 0.4, // per-frame lerp toward the pointer — snappy, tracks closely (1 = exact/no lag)
+  idleDelay: 500, // ms of pointer stillness before the dot starts fading out
+  fadeOut: 0.06, // per-frame opacity lerp toward 0 once idle (gentle fade)
+  fadeIn: 0.25, // per-frame opacity lerp toward 1 on movement (snappy reappear)
+} as const;
+
+/**
+ * Career timeline connector (see <Career> + `careerLineDraw`). One SVG path —
+ * trunk + branches — drawn via stroke-dashoffset scrubbed to scroll position.
+ */
+export const CAREER = {
+  scrub: 0.6, // seconds of scroll catch-up on the line draw
+  gap: 10, // px gap between a branch end and its card (never touches)
+  stroke: 2, // line stroke width (px)
+  color: "#3b82f6", // flat accent blue (matches card underlines / eyebrows)
+  start: "top 72%", // draw begins as the section enters
+  end: "bottom 60%", // draw completes near the section end
+  node: 3.5, // base junction-node radius (px, dim/unreached)
+  nodeFlare: 6, // lit junction-node radius (px, once the draw front passes)
+  tip: 5, // radius of the bright leading tip riding the draw front
+  branchWindow: 0.16, // progress span over which a branch draws once its node is hit
+  nodeWindow: 0.05, // progress span over which a node lights up
 } as const;
 
 export type Ease = (typeof EASE)[keyof typeof EASE];

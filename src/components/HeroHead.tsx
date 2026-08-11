@@ -31,8 +31,8 @@
 //   • Reduced-motion / no-mouse: helpers hold Pose A at rest, no tracking/loop.
 // -----------------------------------------------------------------------------
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { Center, useGLTF } from "@react-three/drei";
 import {
   AdditiveBlending,
@@ -56,12 +56,14 @@ import {
   armBreathe,
   headPointerTilt,
   headScanIn,
+  headScanOut,
   idlePoseSwap,
   prefersReducedMotion,
   styleShift,
 } from "@/lib/animations";
 import { ARM_BREATHE, HEAD_SCAN } from "@/lib/motion";
 import { onReveal } from "@/lib/introControl";
+import { useHeadScan } from "@/components/providers/HeadScanProvider";
 
 // -----------------------------------------------------------------------------
 // ▶ ROBOT ARM-BREATHE (Path B) — shoulder-pivot vertex sway for the fused mesh.
@@ -113,26 +115,33 @@ const ARM_BREATHE_GLSL = /* glsl */ `
 const ARM_SWAY_RAD = MathUtils.degToRad(ARM_BREATHE.swayDeg);
 
 // -----------------------------------------------------------------------------
-// ▶ ROBOT SCAN-IN — entry materialize. A horizontal line sweeps top→bottom (as
-// uScan goes 0→1); the crease lines above the line are revealed, below it are
-// hidden, and a bright white RIM glows right at the line, so the robot reads as
-// being "printed"/scanned into existence. `computeScan` derives, from a vertex's
-// model-local y, a reveal alpha (`vReveal`) + the leading-edge rim (`vRim`),
-// passed to the fragment. uScan stays 1 (fully shown) for reduced motion / the
-// icosahedron; the robot tweens it 0→1 on mount via `headScanIn`.
+// ▶ ROBOT SCAN — entry/exit materialize. A top-anchored horizontal line sweeps
+// and a bright white RIM glows right at it, so the robot reads as being
+// "printed"/scanned in and out of existence:
+//   • Intro (uScan 0→1): the line descends and the part above it is revealed —
+//     the model builds TOP→BOTTOM.
+//   • Exit  (uScan 1→0): the same line RISES and hides the part below it — the
+//     model erases bottom→top. A mirror of the intro.
+// `computeScan` derives, from a vertex's model-local y, a reveal alpha (`vReveal`)
+// + the leading-edge rim (`vRim`), passed to the fragment. uScan stays 1 (fully
+// shown) for reduced motion / the icosahedron; the robot tweens it via
+// `headScanIn` (mount) / `headScanOut` (exit).
 // -----------------------------------------------------------------------------
 const SCAN_GLSL = /* glsl */ `
   uniform float uScan;    // 0 = nothing revealed → 1 = fully revealed
-  varying float vReveal;  // 0..1 reveal alpha (top→bottom sweep)
+  varying float vReveal;  // 0..1 reveal alpha
   varying float vRim;     // bright leading-edge glow at the sweep line
   const float SCAN_TOP  =  1.08; // model-local y just above the head
   const float SCAN_BOT  = -1.08; // just below the feet
-  const float SCAN_BAND =  0.12; // reveal softness below the line
+  const float SCAN_BAND =  0.12; // reveal softness at the line
   const float SCAN_RIM  =  0.05; // rim half-thickness
   void computeScan(vec3 p) {
     if (uScan >= 1.0) { vReveal = 1.0; vRim = 0.0; return; }
-    float scanY = mix(SCAN_TOP, SCAN_BOT, uScan);        // sweeps top→bottom
-    vReveal = smoothstep(scanY, scanY + SCAN_BAND, p.y); // above the line → revealed
+    // A top-anchored line; everything ABOVE it is revealed. Intro tweens uScan
+    // 0→1 so the line descends and the model builds TOP→BOTTOM; the exit tweens
+    // it 1→0 so the same line RISES and erases the model bottom→top — a mirror.
+    float scanY = mix(SCAN_TOP, SCAN_BOT, uScan);
+    vReveal = smoothstep(scanY, scanY + SCAN_BAND, p.y);
     vRim = 1.0 - smoothstep(0.0, SCAN_RIM, abs(p.y - scanY));
   }
 `;
@@ -187,8 +196,8 @@ function writeArmSway(m: MeshBasicMaterial | ShaderMaterial | null, amp: number,
   uArmPhase.value = phase;
 }
 
-/** Write the scan-in progress (0→1) to a material carrying `uScan` (the robot's
- *  crease-line shaders). No-op for anything else. */
+/** Write the scan progress (0→1 in / 1→0 out) to a material carrying `uScan`
+ *  (the robot's crease-line + halftone shaders). No-op for anything else. */
 function writeScan(m: MeshBasicMaterial | ShaderMaterial | null, v: number) {
   if (!(m instanceof ShaderMaterial)) return;
   const u = m.uniforms.uScan;
@@ -209,7 +218,11 @@ const HALFTONE_VERTEX = /* glsl */ `
   varying vec3 vViewNormal;
   varying vec3 vViewPos;
   ${ARM_BREATHE_GLSL}
+  ${SCAN_GLSL}
   void main() {
+    // Same top→bottom (in) / bottom→top (out) reveal the crease lines use, so
+    // the halftone style disappears on scan-out too rather than staying visible.
+    computeScan(position);
     // Swing the lower-arm vertices from the shoulder before shading (robot only;
     // a no-op when uArmAmp is 0). Normals are left unrotated — the sway is a few
     // degrees, so the lighting shift is imperceptible.
@@ -226,8 +239,13 @@ const HALFTONE_FRAGMENT = /* glsl */ `
   uniform vec3 uLightDir;
   varying vec3 vViewNormal;
   varying vec3 vViewPos;
+  varying float vReveal; // 0..1 scan reveal (hidden below the sweep line)
+  varying float vRim;    // bright leading edge at the sweep line
   void main() {
-    if (uOpacity <= 0.001) discard;
+    // Gate the whole style by the scan reveal so it hides on scan-out; discard
+    // below the line (also skips depth-writing invisible fragments).
+    float a = uOpacity * clamp(vReveal + vRim, 0.0, 1.0);
+    if (a <= 0.001) discard;
     vec3 N = normalize(vViewNormal);
     vec3 L = normalize(uLightDir);
     vec3 V = normalize(-vViewPos);        // fragment → camera (view space)
@@ -248,7 +266,9 @@ const HALFTONE_FRAGMENT = /* glsl */ `
     // behind the front surface bleeds through the negative space between dots. The
     // whole mesh fades via uOpacity for the style crossfade; depthWrite (on the
     // material) makes the nearest front surface self-occlude everything deeper.
-    gl_FragColor = vec4(vec3(coverage), uOpacity);
+    // A bright white leading edge lifts the sweep line during scan in/out.
+    vec3 col = mix(vec3(coverage), vec3(1.0), vRim * 0.85);
+    gl_FragColor = vec4(col, a);
   }
 `;
 
@@ -390,12 +410,23 @@ const ROBOT_POSE_B: Euler3 = ROBOT_POSE_A;
 // fov 45) works for any geometry.
 const FIT_RADIUS = 1.1;
 
+// Drag-to-rotate (landing robot): radians of rotation per pixel dragged, and the
+// clamp on the up/down (X) tilt so the figure can't be flipped fully over. Y spin
+// is unclamped (you can turn it all the way around).
+const DRAG_SENSITIVITY = 0.01;
+const DRAG_MAX_X = 1.2; // ~69° up/down
+// Per-frame ease of the drag rotation back to 0 once released, so the figure
+// springs back to the orientation it loaded with (higher = snappier return).
+const DRAG_RETURN_LERP = 0.06;
+
 // Wireframe treatments. The polyhedron keeps the site's dim-gray look; the robot
 // gets the bright additive/glow treatment (unchanged from the full-wireframe
 // version — only the edge SET changed to crease edges).
 const POLY_STYLE = {
+  // Both copies share ONE tone (zinc-300): the blue Pose-B variant was removed,
+  // so the idle pose-crossfade no longer tints the wireframe blue.
   colorA: "#d4d4d8", // zinc-300
-  colorB: "#60a5fa", // blue-400
+  colorB: "#d4d4d8", // zinc-300 (was blue-400)
   additive: false,
   renderAs: "wireframe" as const,
 };
@@ -432,9 +463,12 @@ const CURSOR_IDLE = 1e4; // parked far off-screen so nothing is repelled when id
 
 function ParticleField({
   styleMix,
+  scan,
   reduce,
 }: {
   styleMix: React.RefObject<{ v: number }>;
+  /** Scan reveal (1 = shown, → 0 on exit) so the field fades out with the model. */
+  scan: React.RefObject<{ v: number }>;
   reduce: boolean;
 }) {
   const matRef = useRef<ShaderMaterial>(null);
@@ -467,7 +501,10 @@ function ParticleField({
   useFrame((state, delta) => {
     const m = matRef.current;
     if (!m) return;
-    m.uniforms.uOpacity.value = styleMix.current.v; // fade with Style B
+    // Fade with Style B, and additionally with the scan reveal so the field
+    // disappears alongside the model on scan-out (scan.v is a constant 1 for the
+    // icosahedron, so it's a no-op there).
+    m.uniforms.uOpacity.value = styleMix.current.v * scan.current.v;
     if (reduce) return;
     m.uniforms.uTime.value += delta;
     // Map the window cursor to world XY on the particle plane (~z -3).
@@ -517,7 +554,11 @@ function ShapeMeshes({
   spin = 0,
   zoom = 1,
   arms = false,
+  scanEnabled = false,
   scanOnReveal = false,
+  bindExit,
+  draggable = false,
+  drag,
 }: {
   /** Style A geometry — line set (robot) or wireframe mesh (icosahedron). */
   geometry: BufferGeometry;
@@ -534,18 +575,81 @@ function ShapeMeshes({
   zoom?: number;
   /** Enable the shoulder-pivot arm-breathe sway (robot only — it has arms). */
   arms?: boolean;
+  /** Enable the scan-in / scan-out sweep (robot + the Projects icosahedron). */
+  scanEnabled?: boolean;
   /** Start the scan-in on the intro reveal instead of on mount (landing robot). */
   scanOnReveal?: boolean;
+  /** Publish a function that plays the scan-OUT (bottom→top) and resolves when
+   *  done, so a page-leave can await it. Called with null to unbind. Bridges the
+   *  outro out of the R3F Canvas (React context can't cross it). */
+  bindExit?: (fn: (() => Promise<void>) | null) => void;
+  /** Allow the user to grab the figure and swing it around (landing robot). */
+  draggable?: boolean;
+  /** Accumulated drag rotation (radians), added to the group each frame. Owned by
+   *  HeroHead so it persists across re-renders; mutated by the drag handlers. */
+  drag?: React.RefObject<{ x: number; y: number }>;
 }) {
   const group = useRef<Group>(null);
-  // Style A material refs. Robot → ShaderMaterial (crease lines, displacing);
-  // icosahedron → MeshBasicMaterial (wireframe). Mutually exclusive at runtime.
+  // Style A material refs — a scan-aware ShaderMaterial for both shapes now (the
+  // robot's crease lines and the icosahedron's wireframe), so both can scan.
   const matA = useRef<MeshBasicMaterial | ShaderMaterial>(null);
   const matB = useRef<MeshBasicMaterial | ShaderMaterial>(null);
 
   // Accumulated auto-spin angle (radians). Reduced motion disables the spin.
   const spinAngle = useRef(0);
   const reduce = useMemo(() => prefersReducedMotion(), []);
+
+  // --- Drag-to-rotate: hold the figure and swing it (landing robot only). ---
+  // The pointer-DOWN is an R3F event on the solid mesh below, so grabbing only
+  // starts when the cursor is actually over the figure; move/up are window-level
+  // so the drag keeps tracking even if the cursor leaves the silhouette.
+  const { gl } = useThree();
+  const dragging = useRef(false);
+  const lastPtr = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (!draggable || !drag) return;
+    const onMove = (e: PointerEvent) => {
+      if (!dragging.current) return;
+      const dx = e.clientX - lastPtr.current.x;
+      const dy = e.clientY - lastPtr.current.y;
+      drag.current.y += dx * DRAG_SENSITIVITY; // horizontal → spin around Y
+      drag.current.x = MathUtils.clamp(
+        drag.current.x + dy * DRAG_SENSITIVITY, // vertical → tilt around X (clamped)
+        -DRAG_MAX_X,
+        DRAG_MAX_X,
+      );
+      lastPtr.current = { x: e.clientX, y: e.clientY };
+    };
+    const onUp = () => {
+      if (!dragging.current) return;
+      dragging.current = false;
+      gl.domElement.style.cursor = "grab";
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [draggable, drag, gl]);
+
+  const onGrab = useCallback(
+    (e: ThreeEvent<PointerEvent>) => {
+      if (!draggable) return;
+      e.stopPropagation();
+      dragging.current = true;
+      lastPtr.current = { x: e.clientX, y: e.clientY };
+      gl.domElement.style.cursor = "grabbing";
+    },
+    [draggable, gl],
+  );
+  const onHoverIn = useCallback(() => {
+    if (draggable && !dragging.current) gl.domElement.style.cursor = "grab";
+  }, [draggable, gl]);
+  const onHoverOut = useCallback(() => {
+    if (draggable && !dragging.current) gl.domElement.style.cursor = "";
+  }, [draggable, gl]);
 
   // Arm-breathe (robot only). `armPhase` is looped 0→1 by the `armBreathe` GSAP
   // tween. `armUniforms` seeds the sway uniforms into each Style-A/B shader's
@@ -564,13 +668,13 @@ function ShapeMeshes({
     [],
   );
 
-  // Scan-in (robot crease lines only). `scan.v` tweens 0→1 on mount; the line
-  // shader sweeps the reveal top→bottom. Seeded per Style-A line material; starts
-  // hidden (0) for the robot, fully revealed (1) otherwise / reduced motion.
-  const scan = useRef({ v: arms && !reduce ? 0 : 1 });
+  // Scan-in (robot, both render styles). `scan.v` tweens 0→1 on mount; the shared
+  // scan shader sweeps the reveal top→bottom for the crease lines AND the halftone.
+  // Seeded per material; starts hidden (0) for the robot, revealed (1) otherwise.
+  const scan = useRef({ v: scanEnabled && !reduce ? 0 : 1 });
   const scanUniforms = useMemo(
-    () => ({ uScan: { value: arms && !reduce ? 0 : 1 } }),
-    [arms, reduce],
+    () => ({ uScan: { value: scanEnabled && !reduce ? 0 : 1 } }),
+    [scanEnabled, reduce],
   );
 
   // Pose cross-fade drives these plain values (not the materials directly), so
@@ -578,7 +682,10 @@ function ShapeMeshes({
   const poseOpA = useRef({ opacity: 1 });
   const poseOpB = useRef({ opacity: 0 });
   // Style mix: 0 = wireframe (A), 1 = halftone (B). Driven by styleShift.
-  const styleMix = useRef({ v: 0 });
+  // The robot STARTS on the halftone (B) so the entry scan materializes the solid
+  // dot-matrix form top→bottom — the mirror of the exit dissolving it bottom→top.
+  // (The idle styleShift loop takes over after the scan.)
+  const styleMix = useRef({ v: arms && !reduce ? 1 : 0 });
 
   // Halftone material ref (mutated each frame for the crossfade) + its stable
   // uniforms object for the JSX.
@@ -589,8 +696,9 @@ function ShapeMeshes({
       uDotSize: { value: 8 }, // device px per dot cell
       uLightDir: { value: new Vector3(0.2, 0.85, 0.45) }, // view-space, TOP-front
       ...armUniforms, // seed sway uniforms so the halftone shader binds them
+      ...scanUniforms, // seed uScan so the halftone scans in/out with the lines
     }),
-    [armUniforms],
+    [armUniforms, scanUniforms],
   );
 
   // Style A crease-line uniforms (robot). Own color + pose-crossfade opacity, plus
@@ -614,18 +722,20 @@ function ShapeMeshes({
     [armUniforms, scanUniforms, style.colorB],
   );
 
-  // Pose cross-fade (short cycle) + style shift (long cycle) run alongside. On the
-  // robot, hold the style shift until the scan-in finishes so the halftone (Style
-  // B) doesn't appear mid-sweep — only the crease lines scan in.
+  // Pose cross-fade (short cycle) + style shift (long cycle) run alongside. When
+  // a scan is enabled, hold the style shift until the scan-in finishes so the
+  // style doesn't change mid-sweep: the shape materializes cleanly on its starting
+  // form (robot → halftone B, icosahedron → wireframe A), then the idle A↔B shift
+  // begins.
   useEffect(() => {
     const poseTl = idlePoseSwap(poseOpA.current, poseOpB.current);
     const styleTl = styleShift(styleMix.current);
-    if (arms && !reduce) styleTl.delay(HEAD_SCAN.duration);
+    if (scanEnabled && !reduce) styleTl.delay(HEAD_SCAN.duration);
     return () => {
       poseTl.kill();
       styleTl.kill();
     };
-  }, [arms, reduce]);
+  }, [scanEnabled, reduce]);
 
   // Drive the breathe phase on the shared GSAP ticker (robot, motion allowed).
   useEffect(() => {
@@ -636,11 +746,11 @@ function ShapeMeshes({
     };
   }, [arms, reduce]);
 
-  // Scan-in: sweep `scan.v` 0→1 (robot, motion allowed). The landing robot
-  // (`scanOnReveal`) is mounted early but starts its sweep on the intro reveal so
-  // it's in sync with the hero text; elsewhere it sweeps on mount.
+  // Scan-in: sweep `scan.v` 0→1 (scan-enabled shapes, motion allowed). The landing
+  // robot (`scanOnReveal`) is mounted early but starts its sweep on the intro
+  // reveal so it's in sync with the hero text; elsewhere it sweeps on mount.
   useEffect(() => {
-    if (!arms || reduce) return;
+    if (!scanEnabled || reduce) return;
     let tw: ReturnType<typeof headScanIn> | null = null;
     if (scanOnReveal) {
       const off = onReveal(() => {
@@ -655,20 +765,45 @@ function ShapeMeshes({
     return () => {
       tw?.kill();
     };
-  }, [arms, reduce, scanOnReveal]);
+  }, [scanEnabled, reduce, scanOnReveal]);
+
+  // Publish the scan-OUT to the parent (scan-enabled shapes, motion allowed) so a
+  // page-leave can play the bottom→top disappear and wait for it before routing
+  // away. The promise resolves on the tween's completion; useFrame keeps writing
+  // `scan.v` to the shaders while it runs, so the dissolve is visible.
+  useEffect(() => {
+    if (!scanEnabled || reduce || !bindExit) return;
+    const run = () =>
+      new Promise<void>((resolve) => {
+        // Sweep uScan 1→0 so the top-anchored line RISES and wipes the shape from
+        // the bottom up — the mirror of the top→bottom intro build.
+        headScanOut(scan.current).eventCallback("onComplete", resolve);
+      });
+    bindExit(run);
+    return () => bindExit(null);
+  }, [scanEnabled, reduce, bindExit]);
 
   // Each frame: slow auto-spin + mouse look-at on the group, and the combined
   // pose × style opacity on Style A materials / the halftone opacity on Style B.
   useFrame((_, delta) => {
     if (!group.current) return;
     if (!reduce) spinAngle.current += spin * delta;
-    group.current.rotation.x = MathUtils.degToRad(tilt.current.x);
-    group.current.rotation.y = MathUtils.degToRad(tilt.current.y) + spinAngle.current;
+    // While the figure is released, ease the drag rotation back to 0 so it springs
+    // back to the orientation it loaded with; while held, the drag stays put.
+    if (drag && !dragging.current) {
+      drag.current.x -= drag.current.x * DRAG_RETURN_LERP;
+      drag.current.y -= drag.current.y * DRAG_RETURN_LERP;
+    }
+    const dragX = drag?.current.x ?? 0;
+    const dragY = drag?.current.y ?? 0;
+    group.current.rotation.x = MathUtils.degToRad(tilt.current.x) + dragX;
+    group.current.rotation.y =
+      MathUtils.degToRad(tilt.current.y) + spinAngle.current + dragY;
 
     const mix = styleMix.current.v;
     const invMix = 1 - mix;
-    // Style A pose-crossfade opacity: robot lines carry it as a uniform, the
-    // icosahedron wireframe as the material's own `opacity`.
+    // Style A pose-crossfade opacity — carried as the shader's `uOpacity` uniform
+    // for both shapes now (robot crease lines + icosahedron wireframe).
     setPoseOpacity(matA.current, poseOpA.current.opacity * invMix);
     setPoseOpacity(matB.current, poseOpB.current.opacity * invMix);
     if (halftoneMat.current) halftoneMat.current.uniforms.uOpacity.value = mix;
@@ -685,11 +820,13 @@ function ShapeMeshes({
     writeArmSway(matB.current, amp, phase);
     writeArmSway(halftoneMat.current, amp, phase);
 
-    // Scan-in progress → the crease-line shaders (robot only).
-    if (arms) {
+    // Scan progress → all three materials (Style A + halftone), so the shape scans
+    // in on entry and out on exit regardless of which style is currently showing.
+    if (scanEnabled) {
       const sv = scan.current.v;
       writeScan(matA.current, sv);
       writeScan(matB.current, sv);
+      writeScan(halftoneMat.current, sv);
     }
   });
 
@@ -697,8 +834,9 @@ function ShapeMeshes({
 
   return (
     <>
-      {/* Background particle field (behind the head), faded with the style mix. */}
-      <ParticleField styleMix={styleMix} reduce={reduce} />
+      {/* Background particle field (behind the head), faded with the style mix
+          and the scan reveal (so it exits with the model). */}
+      <ParticleField styleMix={styleMix} scan={scan} reduce={reduce} />
 
       <group ref={group}>
       <Center scale={scale * zoom}>
@@ -706,7 +844,16 @@ function ShapeMeshes({
             gaps + depthWrite so only the nearest FrontSide surface shows (no
             back/interior bleed-through); renderOrder 2 draws it after Style A so
             the wireframe below isn't depth-occluded during the crossfade. --- */}
-        <mesh geometry={solidGeometry} rotation={poseA} renderOrder={2}>
+        {/* This solid mesh doubles as the drag hit-target (raycast against the
+            figure's silhouette), so grabbing only starts over the robot. */}
+        <mesh
+          geometry={solidGeometry}
+          rotation={poseA}
+          renderOrder={2}
+          onPointerDown={draggable ? onGrab : undefined}
+          onPointerOver={draggable ? onHoverIn : undefined}
+          onPointerOut={draggable ? onHoverOut : undefined}
+        >
           <shaderMaterial
             ref={halftoneMat}
             transparent
@@ -747,26 +894,32 @@ function ShapeMeshes({
           </>
         ) : (
           <>
+            {/* Wireframe via a ShaderMaterial (not meshBasicMaterial) so it carries
+                the same scan uniforms as the crease lines and can scan in/out.
+                `wireframe` renders the triangle edges; the line shader's colour +
+                pose-opacity + reveal match the old dim-gray look. */}
             <mesh geometry={geometry} rotation={poseA}>
-              <meshBasicMaterial
+              <shaderMaterial
                 ref={matA}
                 wireframe
                 transparent
-                opacity={1}
                 depthWrite={false}
                 blending={blending}
-                color={style.colorA}
+                uniforms={lineUniformsA}
+                vertexShader={LINE_VERTEX}
+                fragmentShader={LINE_FRAGMENT}
               />
             </mesh>
             <mesh geometry={geometry} rotation={poseB}>
-              <meshBasicMaterial
+              <shaderMaterial
                 ref={matB}
                 wireframe
                 transparent
-                opacity={0}
                 depthWrite={false}
                 blending={blending}
-                color={style.colorB}
+                uniforms={lineUniformsB}
+                vertexShader={LINE_VERTEX}
+                fragmentShader={LINE_FRAGMENT}
               />
             </mesh>
           </>
@@ -782,10 +935,14 @@ function PolyShape({
   tilt,
   spin = 0,
   zoom = 1,
+  scanEnabled = false,
+  bindExit,
 }: {
   tilt: React.RefObject<{ x: number; y: number }>;
   spin?: number;
   zoom?: number;
+  scanEnabled?: boolean;
+  bindExit?: (fn: (() => Promise<void>) | null) => void;
 }) {
   const geometry = useMemo(() => new IcosahedronGeometry(FIT_RADIUS, 0), []);
   // Solid, flat-normal copy for the halftone (Style B).
@@ -808,6 +965,8 @@ function PolyShape({
       tilt={tilt}
       spin={spin}
       zoom={zoom}
+      scanEnabled={scanEnabled}
+      bindExit={bindExit}
     />
   );
 }
@@ -823,12 +982,20 @@ function RobotShape({
   tilt,
   spin = 0,
   zoom = 1,
+  scanEnabled = false,
   scanOnReveal = false,
+  bindExit,
+  draggable = false,
+  drag,
 }: {
   tilt: React.RefObject<{ x: number; y: number }>;
   spin?: number;
   zoom?: number;
+  scanEnabled?: boolean;
   scanOnReveal?: boolean;
+  bindExit?: (fn: (() => Promise<void>) | null) => void;
+  draggable?: boolean;
+  drag?: React.RefObject<{ x: number; y: number }>;
 }) {
   const { scene } = useGLTF("/robot.glb");
 
@@ -885,7 +1052,11 @@ function RobotShape({
       spin={spin}
       zoom={zoom}
       arms // robot has arms → enable the shoulder-pivot breathe sway
+      scanEnabled={scanEnabled}
       scanOnReveal={scanOnReveal}
+      bindExit={bindExit}
+      draggable={draggable}
+      drag={drag}
     />
   );
 }
@@ -894,6 +1065,8 @@ export function HeroHead({
   shape = "icosahedron",
   spin = 0,
   zoom = 1,
+  scan = false,
+  draggable = false,
   scanOnReveal = false,
 }: {
   shape?: HeadShape;
@@ -901,6 +1074,11 @@ export function HeroHead({
   spin?: number;
   /** Scale multiplier so the model fills more of its canvas (1 = default fit). */
   zoom?: number;
+  /** Enable the scan in/out sweep on the icosahedron (the robot always scans).
+   *  Set by the Projects section for its wireframe polyhedron. */
+  scan?: boolean;
+  /** Let the user grab the figure and swing it around (landing robot). */
+  draggable?: boolean;
   /** Start the robot scan-in on the intro reveal (landing) instead of on mount,
    *  so it syncs with the hero text. Robot only. */
   scanOnReveal?: boolean;
@@ -908,8 +1086,35 @@ export function HeroHead({
   const wrapper = useRef<HTMLDivElement>(null);
   const [inView, setInView] = useState(true);
 
+  // The robot always scans; the icosahedron scans when the `scan` prop is set
+  // (the Projects section). Drives the intro sweep, the exit registration below,
+  // and is threaded into the shape.
+  const scanEnabled = shape === "robot" || scan;
+
   // Shared, mutable target for the eased look-at angle (degrees).
   const tilt = useRef({ x: 0, y: 0 });
+
+  // Accumulated drag rotation (radians) when the figure is draggable. Persists
+  // across renders so a swung pose is kept; mutated by ShapeMeshes' drag handlers.
+  const drag = useRef({ x: 0, y: 0 });
+
+  // Page-leave scan-out: the shape inside the Canvas binds its outro runner here
+  // (context can't cross the Canvas boundary, so we bridge via this ref). We
+  // register it with the HeadScan registry so the Navbar plays it and waits for
+  // the shape to fully disappear before routing to the next page (~1.2s). Only
+  // scan-enabled shapes register; other pages navigate immediately. Reduced
+  // motion opts out entirely.
+  const headScan = useHeadScan();
+  const exitRef = useRef<(() => Promise<void>) | null>(null);
+  const bindExit = useCallback((fn: (() => Promise<void>) | null) => {
+    exitRef.current = fn;
+  }, []);
+  useEffect(() => {
+    if (!scanEnabled || prefersReducedMotion()) return;
+    const fn = () => exitRef.current?.() ?? Promise.resolve();
+    headScan.register(fn);
+    return () => headScan.unregister(fn);
+  }, [scanEnabled, headScan]);
 
   // Wire the existing damped mouse tracker to the tilt ref (no DOM target).
   useEffect(() => {
@@ -937,7 +1142,12 @@ export function HeroHead({
   return (
     <div
       ref={wrapper}
-      className={`h-full w-full ${shape === "robot" ? ROBOT_GLOW_CLASS : ""}`}
+      // When draggable, re-enable pointer events (the landing container is
+      // pointer-events-none) so R3F can raycast the figure; the grab/grabbing
+      // cursor is set by the drag handlers only while over the robot.
+      className={`h-full w-full ${draggable ? "pointer-events-auto" : ""} ${
+        shape === "robot" ? ROBOT_GLOW_CLASS : ""
+      }`}
     >
       <Canvas
         frameloop={inView ? "always" : "never"}
@@ -947,9 +1157,24 @@ export function HeroHead({
       >
         <Suspense fallback={null}>
           {shape === "robot" ? (
-            <RobotShape tilt={tilt} spin={spin} zoom={zoom} scanOnReveal={scanOnReveal} />
+            <RobotShape
+              tilt={tilt}
+              spin={spin}
+              zoom={zoom}
+              scanEnabled={scanEnabled}
+              scanOnReveal={scanOnReveal}
+              bindExit={bindExit}
+              draggable={draggable}
+              drag={drag}
+            />
           ) : (
-            <PolyShape tilt={tilt} spin={spin} zoom={zoom} />
+            <PolyShape
+              tilt={tilt}
+              spin={spin}
+              zoom={zoom}
+              scanEnabled={scanEnabled}
+              bindExit={bindExit}
+            />
           )}
         </Suspense>
       </Canvas>

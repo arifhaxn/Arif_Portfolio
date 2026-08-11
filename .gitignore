@@ -44,3 +44,6 @@ next-env.d.ts
 # The shipped, simplified public/robot.glb IS committed. Force-add if you want the
 # original in the repo (consider Git LFS given the size).
 /public/robot-backup.glb
+
+# reference screenshots — never publish (kept local only)
+/.references/

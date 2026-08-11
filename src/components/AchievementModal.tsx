@@ -24,9 +24,10 @@ import {
 } from "@/lib/animations";
 import type { Achievement } from "@/lib/achievements";
 
-// Pixel-block dissolve grid over the image (16 × 12 = 192 tiles).
-const PIXEL_COLS = 16;
-const PIXEL_ROWS = 12;
+// Pixel-block dissolve grid over the image — fine tiles (48 × 36 = 1728, 4:3 so
+// each tile stays square).
+const PIXEL_COLS = 48;
+const PIXEL_ROWS = 36;
 const PIXEL_TILES = PIXEL_COLS * PIXEL_ROWS;
 
 export function AchievementModal({
@@ -140,7 +141,7 @@ export function AchievementModal({
             }}
           >
             {Array.from({ length: PIXEL_TILES }).map((_, i) => (
-              <div key={i} data-block className="bg-zinc-800" />
+              <div key={i} data-block className="bg-black" />
             ))}
           </div>
         </div>

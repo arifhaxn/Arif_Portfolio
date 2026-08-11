@@ -3,13 +3,13 @@
 // -----------------------------------------------------------------------------
 // NextProjectChain — scroll-past-end loading ring that chains to the next project
 // -----------------------------------------------------------------------------
-// After the gallery, a spacer gives scroll room "past the end." Scrolling through
-// it scrubs a ring (0→100) that FOLLOWS THE CURSOR (fixed bottom-center on touch),
-// with a live 1–100 counter inside and the next project's name beside it, stroked
-// in that project's themeColor. Because it's scrubbed, scrolling back up before
-// 100 reverses and cancels it (fades out as you return to the content). At 100 it
-// chains into the next project (looping after the last) via client-side nav, with
-// the pixel-reveal cover suppressed so the ring-fill IS the transition.
+// Once you scroll to the end of the content, a ring FIXED at bottom-center
+// AUTO-COUNTS 0→100 on its own (time-based, not scroll-driven), with a live 1–100
+// counter inside and a "Next project" label + the next project's name beside it,
+// stroked in that project's themeColor. Scrolling back up into the content before
+// it completes reverses the count and fades it out (cancelable). At 100 it chains
+// into the next project (looping after the last) via client-side nav, with the
+// pixel-reveal cover suppressed so the ring/title reveal IS the transition.
 //
 // Reduced motion: no ring/gesture — a static "next project" link (CSS
 // motion-reduce variants swap the visuals; the effect no-ops in JS).
@@ -49,24 +49,7 @@ export function NextProjectChain({ currentSlug }: { currentSlug: string }) {
       const spacer = spacerRef.current;
       if (!wrap || !circle || !spacer) return;
 
-      const touch = window.matchMedia("(hover: none)").matches;
-
-      // Position: follow the cursor on desktop; parked bottom-center on touch.
-      let stopPointer = () => {};
-      if (touch) {
-        wrap.style.left = "50%";
-        wrap.style.top = "auto";
-        wrap.style.bottom = "3.5rem";
-        wrap.style.transform = "translateX(-50%)";
-      } else {
-        const onMove = (e: PointerEvent) => {
-          // Center the RING on the cursor; the name trails to its right.
-          wrap.style.transform = `translate(${e.clientX - SIZE / 2}px, ${e.clientY - SIZE / 2}px)`;
-        };
-        window.addEventListener("pointermove", onMove);
-        stopPointer = () => window.removeEventListener("pointermove", onMove);
-      }
-
+      const state = { v: 0 };
       const setProgress = (p: number) => {
         p = p < 0 ? 0 : p > 1 ? 1 : p;
         circle.style.strokeDashoffset = String(CIRC * (1 - p));
@@ -75,23 +58,33 @@ export function NextProjectChain({ currentSlug }: { currentSlug: string }) {
       };
       setProgress(0);
 
-      const st = ScrollTrigger.create({
-        trigger: spacer,
-        start: "top bottom", // content end reached (spacer enters from viewport bottom)
-        end: "bottom bottom", // spacer fully scrolled → 100
-        scrub: true,
-        onUpdate: (self) => {
-          setProgress(self.progress);
-          if (self.progress >= 0.999 && !navigatedRef.current) {
-            navigatedRef.current = true;
-            suppressNextPixelReveal();
-            router.push(`/projects/${next.slug}`);
-          }
+      // The ring AUTO-COUNTS 0→100 on its own (time-based, not scroll-driven).
+      const count = gsap.to(state, {
+        v: 1,
+        duration: NEXT_PROJECT.countDuration,
+        ease: "none",
+        paused: true,
+        onUpdate: () => setProgress(state.v),
+        onComplete: () => {
+          if (navigatedRef.current) return;
+          navigatedRef.current = true;
+          suppressNextPixelReveal();
+          router.push(`/projects/${next.slug}`);
         },
       });
 
+      // Reaching the end region starts the count; scrolling back up into the
+      // content reverses it (counts down + fades out) — cancelable until it hits 100.
+      const st = ScrollTrigger.create({
+        trigger: spacer,
+        start: "top center",
+        end: "max",
+        onEnter: () => count.play(),
+        onLeaveBack: () => count.reverse(),
+      });
+
       return () => {
-        stopPointer();
+        count.kill();
         st.kill();
       };
     },
@@ -100,19 +93,21 @@ export function NextProjectChain({ currentSlug }: { currentSlug: string }) {
 
   return (
     <div ref={root}>
-      {/* Scroll runway past the content (removed under reduced motion). */}
+      {/* Scroll runway past the content (removed under reduced motion). Opaque +
+          above the frozen title (z-10) so the fixed entry title/scroll-cue don't
+          show through at the very bottom of the page. */}
       <div
         ref={spacerRef}
         aria-hidden
-        className="motion-reduce:hidden"
+        className="relative z-20 bg-black motion-reduce:hidden"
         style={{ height: NEXT_PROJECT.runway }}
       />
 
-      {/* Pointer-following ring + counter + next title. */}
+      {/* Fixed bottom-center ring + counter + next title. */}
       <div
         ref={ringWrapRef}
         aria-hidden
-        className="pointer-events-none fixed left-0 top-0 z-[90] flex items-center gap-5 opacity-0 will-change-transform motion-reduce:hidden"
+        className="pointer-events-none fixed bottom-10 left-1/2 z-[90] flex -translate-x-1/2 items-center gap-5 opacity-0 motion-reduce:hidden"
       >
         <div className="relative shrink-0" style={{ width: SIZE, height: SIZE }}>
           <svg width={SIZE} height={SIZE} className="-rotate-90">
@@ -155,7 +150,7 @@ export function NextProjectChain({ currentSlug }: { currentSlug: string }) {
       </div>
 
       {/* Reduced-motion affordance: a plain link, no gesture/ring. */}
-      <div className="hidden justify-center px-6 pb-32 motion-reduce:flex">
+      <div className="relative z-20 hidden justify-center bg-black px-6 pb-32 pt-[40vh] motion-reduce:flex">
         <Link
           href={`/projects/${next.slug}`}
           className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.2em] text-zinc-300 transition-colors hover:text-white"

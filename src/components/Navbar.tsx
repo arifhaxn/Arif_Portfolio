@@ -17,11 +17,12 @@
 import { useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useGSAP } from "@/lib/gsap";
 import { navIntro } from "@/lib/animations";
 import { ScrambleText } from "@/components/ScrambleText";
 import { useHeadScan } from "@/components/providers/HeadScanProvider";
+import { getLenis } from "@/components/providers/SmoothScrollProvider";
 
 // Navbar is global (root layout), so the homepage-section links use a "/#anchor"
 // form: from any route a native <Link> navigates HOME and then scrolls to the
@@ -42,16 +43,41 @@ const RIGHT_LINKS = [
 export function Navbar() {
   const root = useRef<HTMLElement>(null);
   const router = useRouter();
+  const pathname = usePathname();
   const headScan = useHeadScan();
 
-  // If a HeroHead is mounted on the current page, play its exit scan before
-  // navigating; otherwise navigate immediately (default <Link> behavior).
   const handleNav = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     // Let modified clicks (new tab, etc.) behave natively.
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+
+    const hashIdx = href.indexOf("#");
+    const path = hashIdx >= 0 ? href.slice(0, hashIdx) : href;
+    const hash = hashIdx >= 0 ? href.slice(hashIdx) : "";
+
+    // Already on this route (e.g. About ↔ Contact while on /about): there's no
+    // remount or scroll reset, so move to the target section — or the top — via
+    // Lenis ourselves. No page-exit scan (nothing is transitioning).
+    if (path === pathname) {
+      e.preventDefault();
+      router.push(href, { scroll: false }); // reflect the URL, don't let Next scroll
+      const el = hash ? document.querySelector<HTMLElement>(hash) : null;
+      const y = el
+        ? Math.max(0, el.getBoundingClientRect().top + window.scrollY - 96)
+        : 0;
+      const lenis = getLenis();
+      if (lenis) lenis.scrollTo(y);
+      else window.scrollTo({ top: y, behavior: "smooth" });
+      return;
+    }
+
+    // Cross-route: if a HeroHead is mounted, play its exit scan before navigating.
+    // #hash targets position themselves on arrival (the About page's hash effect),
+    // so they opt out of Next's nav scroll to avoid a flash of the pre-pin spot.
     if (!headScan.hasMounted()) return;
     e.preventDefault();
-    void headScan.playExitAll().then(() => router.push(href));
+    void headScan
+      .playExitAll()
+      .then(() => router.push(href, hash ? { scroll: false } : undefined));
   };
 
   useGSAP(

@@ -23,9 +23,21 @@ import { gsap, ScrollTrigger, useGSAP } from "@/lib/gsap";
 
 const SmoothScrollContext = createContext<Lenis | null>(null);
 
+// Handle on the live instance stored on `window` (not a module-level variable):
+// under the dev bundler this module can be duplicated, so a module-scoped var set
+// by the provider isn't guaranteed to be the same one a click handler imports.
+// `window` is unambiguously shared. Lets non-render code read the CURRENT Lenis.
+type LenisWindow = Window & { __lenis?: Lenis | null };
+
 /** Access the live Lenis instance (e.g. `lenis?.scrollTo("#section")`). */
 export function useSmoothScroll(): Lenis | null {
   return useContext(SmoothScrollContext);
+}
+
+/** Read the live Lenis instance imperatively (outside render), or null. */
+export function getLenis(): Lenis | null {
+  if (typeof window === "undefined") return null;
+  return (window as LenisWindow).__lenis ?? null;
 }
 
 export function SmoothScrollProvider({ children }: { children: ReactNode }) {
@@ -54,6 +66,7 @@ export function SmoothScrollProvider({ children }: { children: ReactNode }) {
       autoRaf: false, // WE drive the loop via gsap.ticker, not Lenis
     });
     setLenis(instance);
+    (window as LenisWindow).__lenis = instance;
 
     // Every Lenis frame → let ScrollTrigger recompute its progress.
     instance.on("scroll", ScrollTrigger.update);
@@ -71,6 +84,8 @@ export function SmoothScrollProvider({ children }: { children: ReactNode }) {
       gsap.ticker.remove(raf);
       instance.destroy();
       setLenis(null);
+      if ((window as LenisWindow).__lenis === instance)
+        (window as LenisWindow).__lenis = null;
     };
   }, []);
 

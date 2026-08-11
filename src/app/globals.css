@@ -30,6 +30,57 @@ body {
     "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
+/* Custom cursor (CursorDot): while the dot is active on a fine-pointer device,
+   hide the native cursor everywhere — including over links/buttons that set their
+   own `cursor` — so the white dot IS the cursor rather than an addition to it. */
+html.cursor-none,
+html.cursor-none * {
+  cursor: none !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Career timeline (Career) — the "living circuit" connector + cards.          */
+/* -------------------------------------------------------------------------- */
+/* Neon glow on the drawn line (blue) and the leading tip (white → blue halo). */
+.career-line {
+  filter: drop-shadow(0 0 3px rgba(59, 130, 246, 0.9));
+}
+.career-tip {
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.95))
+    drop-shadow(0 0 11px rgba(59, 130, 246, 0.85));
+}
+/* The top "Present" node emits a slow expanding pulse ring, like the live HUD. */
+@keyframes careerPulse {
+  0% { transform: scale(1); opacity: 0.55; }
+  70%, 100% { transform: scale(2.8); opacity: 0; }
+}
+.career-node-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: careerPulse 2.1s ease-out infinite;
+}
+/* Card base ring + the scrubbed active-focus glow (accent) as the front reaches it. */
+.career-card {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14);
+  transition: box-shadow 0.45s ease, transform 0.3s ease;
+}
+/* Hover: smoothly enlarge a touch. Only applies once the reveal has cleared the
+   inline transform (see Career.tsx) — an inline transform would override this. */
+.career-card:hover {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28);
+  transform: scale(1.03);
+}
+.career-card.is-active {
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.55),
+    0 0 34px -8px rgba(59, 130, 246, 0.55);
+}
+@media (prefers-reduced-motion: reduce) {
+  .career-node-pulse {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 /* Project thumbnail card visuals (ThumbnailCard). Each card sets its own
    --accent (the app-logo's dominant color) inline; every layer below tints
    itself from that variable. Ambient animations switch off under reduced motion. */

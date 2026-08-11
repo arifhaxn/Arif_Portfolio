@@ -16,13 +16,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { navIntro } from "@/lib/animations";
 import { INTRO } from "@/lib/motion";
 import { isRevealed, onReveal } from "@/lib/introControl";
 import { LiveStatus } from "@/components/Hud";
+import { LiquidButton } from "@/components/LiquidButton";
 import { ScrambleText } from "@/components/ScrambleText";
 import { useHeadScan } from "@/components/providers/HeadScanProvider";
 
@@ -39,11 +39,16 @@ export function Hero() {
   const headScan = useHeadScan();
 
   // Play the robot exit-scan before navigating (same transition the Navbar uses).
-  const goContact = (e: React.MouseEvent<HTMLAnchorElement>) => {
+  const goContact = (e: React.MouseEvent) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     if (!headScan.hasMounted()) return; // no robot yet → default <Link> navigation
     e.preventDefault();
-    void headScan.playExitAll().then(() => router.push(CONTACT_HREF));
+    // `scroll: false` — the About page positions itself on #contact once its pin-
+    // spacer exists; letting Next scroll on nav lands on the wrong (pre-pin) spot
+    // (the skills section) for a beat first.
+    void headScan.playExitAll().then(() =>
+      router.push(CONTACT_HREF, { scroll: false }),
+    );
   };
 
   // Keep the nameplate hidden until the intro reveals the page, so the fade/rise
@@ -88,7 +93,9 @@ export function Hero() {
           {/* zoom kept modest so the WHOLE robot stays in frame (the model is
               normalized by its bounding sphere, so it only fills ~68% at zoom 1).
               Mounted only after the intro reveals — see showRobot above. */}
-          {showRobot && <HeroHead shape="robot" zoom={0.95} scanOnReveal />}
+          {showRobot && (
+            <HeroHead shape="robot" zoom={0.95} scanOnReveal draggable />
+          )}
         </div>
       </div>
 
@@ -121,7 +128,7 @@ export function Hero() {
         </ScrambleText>
         <h1
           data-hero-line
-          className="mt-3 text-6xl font-semibold leading-[0.9] tracking-tight text-white sm:text-8xl"
+          className="mt-3 font-[family-name:var(--font-relidux)] text-5xl uppercase leading-[0.95] tracking-[0.03em] text-white sm:text-7xl"
         >
           <ScrambleText as="span" className="block">
             Arif
@@ -132,16 +139,17 @@ export function Hero() {
         </h1>
       </div>
 
-      {/* --- Contact CTA — bottom-RIGHT (white → black + grow on hover) ---- */}
-      <Link
-        href={CONTACT_HREF}
-        onClick={goContact}
+      {/* --- Contact CTA — bottom-RIGHT (liquid-fill button) -------------- */}
+      {/* The wrapper carries the position + intro fade (`data-hero-line`); the
+          LiquidButton is the visual, and routes to /about#contact via goContact. */}
+      <div
         data-hero-line
-        aria-label="Contact me"
-        className="group absolute bottom-12 right-6 z-10 rounded-none bg-black px-5 py-2.5 text-sm font-semibold uppercase tracking-[0.2em] text-white shadow-lg shadow-black/30 ring-2 ring-white/60 transition-[transform,background-color,color,box-shadow] duration-300 ease-out hover:scale-[1.05] hover:bg-white hover:text-black hover:ring-black/10 sm:right-10"
+        className="absolute bottom-12 right-6 z-10 sm:right-10"
       >
-        Contact me
-      </Link>
+        <LiquidButton href={CONTACT_HREF} onClick={goContact} aria-label="Get in touch">
+          Get in touch
+        </LiquidButton>
+      </div>
     </section>
   );
 }

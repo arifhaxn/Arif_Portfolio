@@ -32,9 +32,9 @@ export function ThumbnailCard({ project }: { project: Project }) {
           className="pointer-events-none absolute inset-0"
           style={{
             WebkitMaskImage:
-              "radial-gradient(circle at center, transparent 56px, #000 104px)",
+              "radial-gradient(circle at center, transparent 64px, #000 112px)",
             maskImage:
-              "radial-gradient(circle at center, transparent 56px, #000 104px)",
+              "radial-gradient(circle at center, transparent 64px, #000 112px)",
           }}
         >
           <CircuitBackground
@@ -59,8 +59,8 @@ export function ThumbnailCard({ project }: { project: Project }) {
             alt={`${project.name} logo`}
             width={160}
             height={160}
-            sizes="112px"
-            className="h-28 w-28 object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.55)] transition-transform duration-500 ease-out group-hover:scale-110"
+            sizes="128px"
+            className="h-32 w-32 object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.55)] transition-transform duration-500 ease-out group-hover:scale-110"
           />
         </div>
       </div>

@@ -16,12 +16,16 @@
 
 import { gsap, ScrollTrigger, Observer, Flip } from "@/lib/gsap";
 import {
+  ABOUT_PANEL,
   ACHIEVE,
   ARM_BREATHE,
+  CAREER,
+  CURSOR,
   DURATION,
   EASE,
   HEAD_SCAN,
   GALLERY,
+  LIQUID,
   OPACITY,
   PIXEL_REVEAL,
   PIXEL_SCRUB,
@@ -285,6 +289,108 @@ export function pixelScrubReveal(opts: {
   });
 }
 
+/**
+ * About intro → description transition ("curtain"). Pins the portrait screen, then
+ * RAISES a curtain — a jagged panel skyline sitting on top of the description
+ * content — up over the fixed portrait, so the description is dragged into view
+ * directly behind the panels with no gap. Scrubbed to the pinned scroll distance
+ * (progress-driven, like `pixelScrubReveal`); a dark overlay dims the still-visible
+ * portrait above the rising curtain.
+ *
+ * The curtain (`curtain`) is translated as one unit: at progress 0 it's parked a
+ * full viewport + panel-band below (portrait fully visible); at progress 1 the
+ * description fills the viewport and the panel band has risen off the top. Returns
+ * null under reduced motion, leaving the curtain in normal flow (the caller gates
+ * this to desktop; mobile keeps the curtain static and the panel band hidden).
+ */
+export function aboutCurtainRise(opts: {
+  pinEl: HTMLElement;
+  curtain: HTMLElement;
+  panels: HTMLElement[];
+  dimmer: HTMLElement;
+}): ScrollTrigger | null {
+  const { pinEl, curtain, panels, dimmer } = opts;
+  if (prefersReducedMotion()) return null;
+
+  const { bandVh, stagger, darkPeak, runway } = ABOUT_PANEL;
+  const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+  const smooth = (t: number) => t * t * (3 - 2 * t); // smoothstep
+
+  // Curtain travels from (viewport + band) below → 0 (description fills, band off
+  // the top). The panel band sits above the curtain's top edge, so it leads. On
+  // top of that shared rise, each panel gets a small per-panel lag (eased out to
+  // 0 by the end) so the tops appear UNEQUALLY as they first climb, then settle
+  // flush on the description edge — the description drag-up itself is unchanged.
+  const apply = (p: number) => {
+    const vh = window.innerHeight;
+    const band = bandVh * vh;
+    curtain.style.transform = `translateY(${(1 - p) * (vh + band)}px)`;
+    const settle = smooth(clamp01(p)); // 0 → 1; per-panel lag fades as this → 1
+    for (let i = 0; i < panels.length; i++) {
+      const lag = (stagger[i] ?? 0) * vh * (1 - settle);
+      panels[i].style.transform = `translateY(${lag}px)`;
+    }
+    dimmer.style.opacity = String(settle * darkPeak);
+  };
+  apply(0); // start: curtain parked below, no dim
+
+  return ScrollTrigger.create({
+    trigger: pinEl,
+    start: "top top", // pin the portrait screen the moment it tops out
+    end: runway,
+    pin: pinEl,
+    scrub: true,
+    onUpdate: (self) => apply(self.progress),
+  });
+}
+
+/**
+ * Liquid-fill button (see LiquidButton). Builds a PAUSED, reversible timeline that
+ * floods the black badge across the pill — the fill's `width` tweens from the badge
+ * circle (`restWidth`) to the full inner width (`fullWidth`) with pill corners kept
+ * throughout — while the label crossfades dark→white. The caller `play()`s it on
+ * hover/press and `reverse()`s it on leave/release. Timings from `LIQUID`.
+ */
+export function liquidFillTimeline(opts: {
+  fill: HTMLElement;
+  label: HTMLElement;
+  /** Rest geometry — the inset badge circle. */
+  from: gsap.TweenVars;
+  /** Filled geometry — edge-to-edge flood. */
+  to: gsap.TweenVars;
+}): gsap.core.Timeline {
+  const { fill, label, from, to } = opts;
+  gsap.set(fill, from);
+  // Rest colour is a CSS class on the label; the tween just animates toward the
+  // filled colour and GSAP records the dark start from the computed value.
+  const tl = gsap.timeline({ paused: true });
+  tl.to(fill, { ...to, duration: LIQUID.fill, ease: LIQUID.ease }, 0).to(
+    label,
+    { color: LIQUID.textOn, duration: LIQUID.labelFade, ease: LIQUID.ease },
+    0,
+  );
+  return tl;
+}
+
+/**
+ * Liquid-fill button droplet — a tiny blob that detaches below the badge and falls
+ * (translateY + fade) as the fill expands or retracts. One-shot; fire it on each
+ * hover/press state change. Returns the tween so the caller can kill it on cleanup.
+ */
+export function liquidDroplet(drop: HTMLElement): gsap.core.Tween {
+  return gsap.fromTo(
+    drop,
+    { opacity: LIQUID.dropOpacity, y: 0 },
+    {
+      opacity: 0,
+      y: LIQUID.dropFall,
+      duration: LIQUID.droplet,
+      ease: LIQUID.dropEase,
+      overwrite: true,
+    },
+  );
+}
+
 // -----------------------------------------------------------------------------
 // Gallery image zoom-in (case-study detail page)
 // -----------------------------------------------------------------------------
@@ -487,6 +593,29 @@ export function headScanIn(target: { v: number }): gsap.core.Tween {
 }
 
 /**
+ * Robot scan-OUT — the exit counterpart to `headScanIn`, used as a page-leave
+ * transition: sweeps the reveal `v` back 1→0 over `HEAD_SCAN.duration`. The
+ * crease-line shader shows only the part ABOVE the sweep line, so driving `v`
+ * down moves the line bottom→top and dissolves the model from the bottom up — a
+ * mirror of the top→bottom entry. Any in-flight tween on the target (e.g. an
+ * unfinished intro) is killed first so they can't fight. Reduced motion: snap to
+ * hidden (v=0), no sweep. Returns the tween so the caller can await its
+ * completion (and kill it on cleanup).
+ */
+export function headScanOut(target: { v: number }): gsap.core.Tween {
+  gsap.killTweensOf(target);
+  if (prefersReducedMotion()) {
+    target.v = 0;
+    return gsap.to({}, { duration: 0 });
+  }
+  return gsap.to(target, {
+    v: 0,
+    duration: HEAD_SCAN.duration,
+    ease: HEAD_SCAN.ease,
+  });
+}
+
+/**
  * Hero head idle pose swap — crossfades between two stacked layers on a hold →
  * fade → hold loop. Returns the repeating timeline.
  */
@@ -582,6 +711,81 @@ export function headPointerTilt(
     current.x += (goal.x - current.x) * lerp;
     current.y += (goal.y - current.y) * lerp;
     apply(current.x, current.y);
+  };
+
+  window.addEventListener("mousemove", onMove);
+  gsap.ticker.add(update);
+
+  return () => {
+    window.removeEventListener("mousemove", onMove);
+    gsap.ticker.remove(update);
+  };
+}
+
+/**
+ * Custom cursor dot chase — a white dot that eases toward the real pointer each
+ * frame. A `mousemove` listener stores the pointer target; a GSAP ticker callback
+ * (the shared rAF, same as `headPointerTilt`) moves the rendered position a
+ * fraction of the remaining distance toward it every frame
+ * (`current += (target - current) * factor`), so the dot lags then catches up.
+ * The dot also FADES OUT after the pointer sits still for `CURSOR.idleDelay` and
+ * snaps back in on movement. `onUpdate` receives the eased (x, y) in px plus the
+ * current opacity each frame; the caller writes them to the dot element.
+ *
+ * Fine-pointer + hover only — on touch / coarse pointers there is no persistent
+ * cursor to chase, so this returns a no-op cleanup and does nothing (the caller
+ * should leave the native cursor alone). Under prefers-reduced-motion the dot
+ * SNAPS to the pointer (no easing lag) and stays fully visible (no idle fade).
+ *
+ * Returns a cleanup that removes the listener + ticker callback.
+ */
+export function cursorChase(
+  onUpdate: (x: number, y: number, opacity: number) => void,
+  factor: number = CURSOR.ease,
+): () => void {
+  const noop = () => {};
+  const fine =
+    typeof window !== "undefined" &&
+    window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  if (!fine) return noop;
+
+  const reduce = prefersReducedMotion();
+  // Reduced motion → snap directly to the pointer (no easing lag).
+  const ease = reduce ? 1 : factor;
+  // Seed at the viewport center so the dot glides in from a sane spot, not (0,0).
+  const goal = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+  const current = { x: goal.x, y: goal.y };
+
+  let idleMs = 0; // time since the pointer last moved
+  let moved = false; // set by mousemove, consumed once per frame
+  let opacity = 1;
+
+  const onMove = (e: MouseEvent) => {
+    goal.x = e.clientX;
+    goal.y = e.clientY;
+    moved = true;
+  };
+  // gsap.ticker passes (time, deltaTime-in-ms) — use the delta for the idle timer.
+  const update = (_time: number, deltaMs: number) => {
+    current.x += (goal.x - current.x) * ease;
+    current.y += (goal.y - current.y) * ease;
+
+    // Reduced motion: no idle fade — keep the dot fully visible.
+    if (reduce) {
+      onUpdate(current.x, current.y, 1);
+      return;
+    }
+
+    if (moved) {
+      idleMs = 0;
+      moved = false;
+    } else {
+      idleMs += deltaMs;
+    }
+    // Fade out once still past the grace delay; snap back in on movement.
+    const target = idleMs > CURSOR.idleDelay ? 0 : 1;
+    opacity += (target - opacity) * (target > opacity ? CURSOR.fadeIn : CURSOR.fadeOut);
+    onUpdate(current.x, current.y, opacity);
   };
 
   window.addEventListener("mousemove", onMove);
@@ -787,6 +991,42 @@ export function columnParallax(column: Target, speed: number) {
       end: "bottom top",
       scrub: SCRUB.playgroundParallax,
     },
+  });
+}
+
+/**
+ * Career timeline connector draw — drives ONE scroll progress (0→1, scrubbed to
+ * the section's scroll with a catch-up lag) into a `render(progress)` callback.
+ * The caller paints everything from that single progress: the trunk drawing down,
+ * each branch peeling out as the front passes its node, the junction nodes lighting
+ * up, the bright leading tip riding the draw front, and the active-card focus — so
+ * it all reads as one continuous "current" flowing down the timeline. Progress-
+ * driven (not time-based), consistent with `pixelScrubReveal`.
+ *
+ * Reduced motion: `render(1)` is called once (fully drawn / all nodes lit, no tip)
+ * and no scrub is wired. Returns the tween (undefined under reduced motion) so the
+ * caller can kill it (and its ScrollTrigger) on cleanup / rebuild.
+ */
+export function careerLineDraw(
+  trigger: gsap.DOMTarget,
+  render: (progress: number) => void,
+): gsap.core.Tween | undefined {
+  if (prefersReducedMotion()) {
+    render(1);
+    return undefined;
+  }
+  render(0);
+  const state = { p: 0 };
+  return gsap.to(state, {
+    p: 1,
+    ease: EASE.linear, // linear — it's scrubbed to scroll position
+    scrollTrigger: {
+      trigger,
+      start: CAREER.start,
+      end: CAREER.end,
+      scrub: CAREER.scrub,
+    },
+    onUpdate: () => render(state.p),
   });
 }
 

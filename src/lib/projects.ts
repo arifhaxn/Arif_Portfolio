@@ -52,9 +52,14 @@ export const PROJECTS: Project[] = [
     role: "Design & Development",
     year: "2024", // ⚠ placeholder year — confirm/replace
     gallery: [
-      { src: "/projects/lead-unity/role-select.png", caption: "Role selection" },
-      { src: "/projects/lead-unity/dashboard.png", caption: "Student dashboard" },
-      { src: "/projects/lead-unity/admin-panel.png", caption: "Admin — scoring configuration" },
+      { src: "/projects/leadunity/student-ui.png", caption: "Student UI" },
+      { src: "/projects/leadunity/student-dashboard.png", caption: "Student dashboard" },
+      { src: "/projects/leadunity/supervisor-ui.png", caption: "Supervisor UI" },
+      { src: "/projects/leadunity/supervisor-dashboard.png", caption: "Supervisor dashboard" },
+      { src: "/projects/leadunity/admin-panel.png", caption: "Admin panel" },
+      { src: "/projects/leadunity/assistant.png", caption: "LeadUnity assistant" },
+      { src: "/projects/leadunity/push-notifications.png", caption: "Push notifications" },
+      { src: "/projects/leadunity/light-dark-mode.png", caption: "Light & dark mode" },
     ],
   },
   {
