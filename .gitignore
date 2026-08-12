@@ -49,3 +49,5 @@ next-env.d.ts
 
 # reference screenshots — never publish (kept local only)
 /.references/
+
+.vercel

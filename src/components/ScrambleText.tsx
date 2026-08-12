@@ -68,6 +68,12 @@ export const ScrambleText = forwardRef<ScrambleHandle, ScrambleTextProps>(
     const tweenRef = useRef<gsap.core.Tween | null>(null);
     const enteredRef = useRef(false);
 
+    // Release a previously pinned height (see below).
+    const releaseHeight = () => {
+      const root = rootRef.current;
+      if (root) root.style.height = "";
+    };
+
     const scramble = () => {
       const el = innerRef.current;
       if (!el) return;
@@ -76,7 +82,25 @@ export const ScrambleText = forwardRef<ScrambleHandle, ScrambleTextProps>(
         return;
       }
       tweenRef.current?.kill();
+
+      // Layout-shift guard: the scramble swaps each character for a random glyph
+      // of the SAME count but a DIFFERENT width, so a line can flip between 1 and
+      // 2 wrapped lines frame-to-frame. If the element grew/shrank each frame it
+      // would reflow everything below it (e.g. the contact section jitters while a
+      // skills line scrambles). Pin the box to its settled (final-text) height for
+      // the duration — a transient extra line overflows harmlessly instead of
+      // pushing siblings. Measure with any prior lock cleared so it's the natural
+      // height. (No-op for inline/single-line uses, where nothing ever rewraps.)
+      const root = rootRef.current;
+      if (root) {
+        root.style.height = "";
+        const h = root.getBoundingClientRect().height;
+        if (h > 0) root.style.height = `${h}px`;
+      }
+
       tweenRef.current = scrambleText(el, text);
+      // Release the lock once the scramble settles (or is otherwise resolved).
+      tweenRef.current.then(releaseHeight, releaseHeight);
     };
 
     // Entrance — idempotent (first call wins).
@@ -115,6 +139,7 @@ export const ScrambleText = forwardRef<ScrambleHandle, ScrambleTextProps>(
       return () => {
         io?.disconnect();
         tweenRef.current?.kill();
+        releaseHeight();
         if (node) delete node.__scramblePlay;
       };
       // Handlers are stable for this element's lifetime.

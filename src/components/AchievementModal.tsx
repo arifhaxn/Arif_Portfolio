@@ -100,7 +100,7 @@ export function AchievementModal({
       <div
         ref={panel}
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 w-full max-w-lg will-change-transform [perspective:1200px]"
+        className="relative z-10 w-full max-w-2xl will-change-transform [perspective:1200px]"
       >
         {/* Certificate image (or enlarged placeholder), with the pixel-block
             dissolve overlay on top. overflow-hidden clips tiles to the rounding.
@@ -131,10 +131,15 @@ export function AchievementModal({
           )}
 
           {/* Pixel-block dissolve — tiles start opaque, covering the image, and
-              pop out one-by-one on entry (animated in achievementModalIn). */}
+              pop out one-by-one on entry (animated in achievementModalIn).
+              NOTE: the container must stay transparent. The tiles are its
+              children, so a faded tile reveals whatever is *behind the tile* —
+              i.e. this container. If the container had its own background, a
+              dissolved tile would reveal that background instead of the image
+              underneath, leaving the certificate masked (a permanent box). */}
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 grid gap-px bg-black"
+            className="pointer-events-none absolute inset-0 grid gap-px"
             style={{
               gridTemplateColumns: `repeat(${PIXEL_COLS}, minmax(0, 1fr))`,
               gridTemplateRows: `repeat(${PIXEL_ROWS}, minmax(0, 1fr))`,

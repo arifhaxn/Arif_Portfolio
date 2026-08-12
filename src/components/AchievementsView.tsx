@@ -163,22 +163,32 @@ export function AchievementsView({ content }: { content: AchievementsContent }) 
                   className="grid gap-x-24 gap-y-24"
                   style={{ gridTemplateColumns: `repeat(${COLS}, ${CARD_W}px)` }}
                 >
-                  {items.map((a) => (
-                    <div
-                      key={a.id}
-                      data-cell
-                      style={{ width: CARD_W, height: CARD_H }}
-                      className="will-change-transform"
-                      onMouseEnter={() => focus(a.id)}
-                      onMouseLeave={() => focus(null)}
-                      onPointerDown={(e) => {
-                        downPos.current = { x: e.clientX, y: e.clientY };
-                      }}
-                      onPointerUp={(e) => openIfClick(a, e)}
-                    >
-                      <AchievementCard achievement={a} focused={focusedId === a.id} />
-                    </div>
-                  ))}
+                  {items.map((a) => {
+                    // Focus identity must be globally unique: certificate ids
+                    // restart per category (01, 02, … in each section), so keying
+                    // focus on `a.id` alone lights up the same-index card in every
+                    // section — i.e. the whole column. Scope it by category.
+                    const cellKey = `${category}::${a.id}`;
+                    return (
+                      <div
+                        key={cellKey}
+                        data-cell
+                        style={{ width: CARD_W, height: CARD_H }}
+                        className="will-change-transform"
+                        onMouseEnter={() => focus(cellKey)}
+                        onMouseLeave={() => focus(null)}
+                        onPointerDown={(e) => {
+                          downPos.current = { x: e.clientX, y: e.clientY };
+                        }}
+                        onPointerUp={(e) => openIfClick(a, e)}
+                      >
+                        <AchievementCard
+                          achievement={a}
+                          focused={focusedId === cellKey}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             ))}
@@ -247,12 +257,15 @@ export function AchievementsView({ content }: { content: AchievementsContent }) 
             <div className="mt-4 grid grid-cols-2 gap-4">
               {items.map((a) => (
                 <div
-                  key={a.id}
+                  key={`${category}::${a.id}`}
                   data-mobile-card
                   className="h-44"
                   onClick={() => setSelected(a)}
                 >
-                  <AchievementCard achievement={a} focused={focusedId === a.id} />
+                  <AchievementCard
+                    achievement={a}
+                    focused={focusedId === `${category}::${a.id}`}
+                  />
                 </div>
               ))}
             </div>

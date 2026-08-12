@@ -100,10 +100,13 @@ export function Hero({ hero }: { hero: HeroContent }) {
         </div>
       </div>
 
-      {/* --- Clock / status — middle-LEFT, vertically centered ------------- */}
+      {/* --- Clock / status — middle-LEFT on desktop; pinned just under the nav
+          on mobile (portrait has no room mid-height without colliding with the
+          right-hand status + the robot). max-w + LiveStatus's flex-wrap let the
+          long clock line wrap within the screen instead of overflowing. -------- */}
       <div
         data-hero-line
-        className="absolute left-6 top-1/2 z-10 -translate-y-1/2 sm:left-10"
+        className="absolute left-6 top-20 z-10 max-w-[calc(100%-3rem)] sm:left-10 sm:top-1/2 sm:max-w-none sm:-translate-y-1/2"
       >
         <LiveStatus
           statusWords={hero.hud.statusWords}
@@ -112,17 +115,19 @@ export function Hero({ hero }: { hero: HeroContent }) {
         />
       </div>
 
-      {/* --- Status line — middle-RIGHT, vertically centered, right-aligned -- */}
+      {/* --- Status line — middle-RIGHT on desktop. Hidden on mobile: it's ambient
+          decoration and there's no room for it beside the clock without overlap. */}
       <div
         data-hero-line
-        className="absolute right-6 top-1/2 z-10 -translate-y-1/2 text-right font-mono text-[10px] uppercase leading-relaxed tracking-[0.2em] text-zinc-500 sm:right-10"
+        className="absolute right-6 top-1/2 z-10 hidden -translate-y-1/2 text-right font-mono text-[10px] uppercase leading-relaxed tracking-[0.2em] text-zinc-500 sm:right-10 sm:block"
       >
         <span className="block text-zinc-300">{hero.tagline.primary}</span>
         <span className="block">{hero.tagline.secondary}</span>
       </div>
 
-      {/* --- Name — bottom-LEFT, like the /about hero --------------------- */}
-      <div className="absolute bottom-12 left-6 z-10 text-left sm:left-10">
+      {/* --- Name — bottom-LEFT. Raised on mobile so the CTA can stack directly
+          beneath it instead of colliding with it in the bottom-right corner. --- */}
+      <div className="absolute bottom-32 left-6 z-10 text-left sm:bottom-12 sm:left-10">
         <ScrambleText
           as="p"
           data-hero-line
@@ -142,12 +147,13 @@ export function Hero({ hero }: { hero: HeroContent }) {
         </h1>
       </div>
 
-      {/* --- Contact CTA — bottom-RIGHT (liquid-fill button) -------------- */}
+      {/* --- Contact CTA — bottom-RIGHT on desktop; stacked under the name at the
+          bottom-LEFT on mobile so the two no longer overlap. ------------------- */}
       {/* The wrapper carries the position + intro fade (`data-hero-line`); the
           LiquidButton is the visual, and routes to /about#contact via goContact. */}
       <div
         data-hero-line
-        className="absolute bottom-12 right-6 z-10 sm:right-10"
+        className="absolute bottom-12 left-6 z-10 sm:left-auto sm:right-10"
       >
         <LiquidButton href={CONTACT_HREF} onClick={goContact} aria-label={hero.ctaLabel}>
           {hero.ctaLabel}

@@ -80,7 +80,7 @@ export function LiveStatus({
   }, [statusWords.length]);
 
   return (
-    <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
       <span className="tabular-nums">{time ?? "--:--:--"}</span>
       <span>{locationLabel}</span>
       <span ref={phraseRef} className="text-zinc-300">
