@@ -80,11 +80,17 @@ export function PixelReveal() {
   // Cover + dissolve on first mount and on every pathname change.
   useIsoLayoutEffect(() => {
     if (prefersReducedMotion()) return;
-    // Excluded routes (/, /about): no reveal. The `hidden` class below keeps the
-    // overlay out of the DOM flow; mark first-load consumed so a later navigation
-    // to an included route still plays as a route change.
+    // Excluded routes (/, /about): no reveal. The `hidden` class below normally
+    // keeps the overlay out of flow, but that class is derived from usePathname()
+    // at RENDER time, which can lag (SSR/hydration) and leave the default-opaque
+    // cover painted over the page — the landing then shows a stuck black grid.
+    // So force the overlay non-covering here too (this layout effect has the live
+    // pathname and runs before paint). Mark first-load consumed so a later
+    // navigation to an included route still plays as a route change.
     if (EXCLUDED.has(pathname)) {
       firstRef.current = false;
+      const el = overlay.current;
+      if (el) gsap.set(el, { opacity: 0, pointerEvents: "none" });
       return;
     }
     const el = overlay.current;
