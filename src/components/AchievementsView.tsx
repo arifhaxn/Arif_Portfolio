@@ -224,7 +224,9 @@ export function AchievementsView({ content }: { content: AchievementsContent }) 
       </div>
 
       {/* ==================== Mobile: stacked sections ===================== */}
-      <div className="px-6 pb-24 pt-28 lg:hidden">
+      {/* pt is notch-safe (safe-area inset) so the eyebrow clears the fixed nav
+          with room to breathe. */}
+      <div className="px-6 pb-24 pt-[calc(7rem+env(safe-area-inset-top))] lg:hidden">
         <ScrambleText
           as="p"
           entrance="observer"
@@ -235,16 +237,25 @@ export function AchievementsView({ content }: { content: AchievementsContent }) 
         <ScrambleText
           as="h1"
           entrance="observer"
-          className="mt-2 text-4xl font-semibold tracking-tight"
+          className="mt-3 text-4xl font-semibold tracking-tight"
         >
           {content.heading}
         </ScrambleText>
-        <p className="mt-1 text-sm text-zinc-400">{content.subtitle}</p>
-        <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
-          <span className="tabular-nums text-zinc-300">
-            CERTIFICATES {certCount} · ELAPSED {mmss} · SWITCHES {switchCount}
+        <p className="mt-3 text-sm text-zinc-400">{content.subtitle}</p>
+        {/* Stat readout — each stat is one intact flex item so a narrow screen
+            wraps BETWEEN stats, never splitting a label from its value (the old
+            single line broke as "SWITCHES / 000"). */}
+        <div className="mt-6 flex flex-wrap gap-x-5 gap-y-1.5 border-t border-white/5 pt-5 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+          <span>
+            Certificates <span className="tabular-nums text-zinc-300">{certCount}</span>
           </span>
-        </p>
+          <span>
+            Elapsed <span className="tabular-nums text-zinc-300">{mmss}</span>
+          </span>
+          <span>
+            Switches <span className="tabular-nums text-zinc-300">{switchCount}</span>
+          </span>
+        </div>
 
         {GROUPS.map(({ category, items }) => (
           <section key={category} className="mt-12">
