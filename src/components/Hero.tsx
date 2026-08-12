@@ -25,6 +25,7 @@ import { LiveStatus } from "@/components/Hud";
 import { LiquidButton } from "@/components/LiquidButton";
 import { ScrambleText } from "@/components/ScrambleText";
 import { useHeadScan } from "@/components/providers/HeadScanProvider";
+import type { HeroContent } from "@/lib/content-types";
 
 const CONTACT_HREF = "/about#contact";
 
@@ -33,7 +34,7 @@ const HeroHead = dynamic(
   { ssr: false },
 );
 
-export function Hero() {
+export function Hero({ hero }: { hero: HeroContent }) {
   const root = useRef<HTMLElement>(null);
   const router = useRouter();
   const headScan = useHeadScan();
@@ -104,17 +105,20 @@ export function Hero() {
         data-hero-line
         className="absolute left-6 top-1/2 z-10 -translate-y-1/2 sm:left-10"
       >
-        <LiveStatus />
+        <LiveStatus
+          statusWords={hero.hud.statusWords}
+          timeZone={hero.hud.timeZone}
+          locationLabel={hero.hud.locationLabel}
+        />
       </div>
 
       {/* --- Status line — middle-RIGHT, vertically centered, right-aligned -- */}
-      {/* ⚠ placeholder status copy — tweak to taste. */}
       <div
         data-hero-line
         className="absolute right-6 top-1/2 z-10 -translate-y-1/2 text-right font-mono text-[10px] uppercase leading-relaxed tracking-[0.2em] text-zinc-500 sm:right-10"
       >
-        <span className="block text-zinc-300">Building quietly</span>
-        <span className="block">from Sylhet, BD</span>
+        <span className="block text-zinc-300">{hero.tagline.primary}</span>
+        <span className="block">{hero.tagline.secondary}</span>
       </div>
 
       {/* --- Name — bottom-LEFT, like the /about hero --------------------- */}
@@ -124,18 +128,17 @@ export function Hero() {
           data-hero-line
           className="font-mono text-xs uppercase tracking-[0.3em] text-blue-400"
         >
-          / Full-Stack Developer
+          {hero.eyebrow}
         </ScrambleText>
         <h1
           data-hero-line
           className="mt-3 font-[family-name:var(--font-relidux)] text-5xl uppercase leading-[0.95] tracking-[0.03em] text-white sm:text-7xl"
         >
-          <ScrambleText as="span" className="block">
-            Arif
-          </ScrambleText>
-          <ScrambleText as="span" className="block">
-            Hasan
-          </ScrambleText>
+          {hero.name.split(/\s+/).map((word, i) => (
+            <ScrambleText as="span" key={i} className="block">
+              {word}
+            </ScrambleText>
+          ))}
         </h1>
       </div>
 
@@ -146,8 +149,8 @@ export function Hero() {
         data-hero-line
         className="absolute bottom-12 right-6 z-10 sm:right-10"
       >
-        <LiquidButton href={CONTACT_HREF} onClick={goContact} aria-label="Get in touch">
-          Get in touch
+        <LiquidButton href={CONTACT_HREF} onClick={goContact} aria-label={hero.ctaLabel}>
+          {hero.ctaLabel}
         </LiquidButton>
       </div>
     </section>

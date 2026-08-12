@@ -38,9 +38,10 @@ import {
   thumbRailSwap,
 } from "@/lib/animations";
 import { BG_SHAPE_OPACITY, DURATION, EASE } from "@/lib/motion";
-import { PROJECTS } from "@/lib/projects";
+import type { Project } from "@/lib/projects";
 import { ThumbnailCard } from "@/components/ThumbnailCard";
 import { ScrambleText } from "@/components/ScrambleText";
+import { externalHref } from "@/lib/url";
 
 const HeroHead = dynamic(
   () => import("@/components/HeroHead").then((m) => m.HeroHead),
@@ -60,7 +61,7 @@ const GITHUB_ICON =
 function GitHubCorner({ repo, name }: { repo: string; name: string }) {
   return (
     <a
-      href={repo}
+      href={externalHref(repo)}
       target="_blank"
       rel="noopener noreferrer"
       aria-label={`${name} on GitHub`}
@@ -74,8 +75,7 @@ function GitHubCorner({ repo, name }: { repo: string; name: string }) {
 }
 
 /** Shared meta block (index, title, description, stack) used by both layouts. */
-function ProjectMeta({ index }: { index: number }) {
-  const p = PROJECTS[index];
+function ProjectMeta({ project: p }: { project: Project }) {
   return (
     <div className="flex flex-col gap-2 text-left">
       <p className="text-sm font-medium text-white">
@@ -91,7 +91,7 @@ function ProjectMeta({ index }: { index: number }) {
   );
 }
 
-export function Projects() {
+export function Projects({ projects }: { projects: Project[] }) {
   const root = useRef<HTMLElement>(null);
   const pinCol = useRef<HTMLDivElement>(null);
   const bgShape = useRef<HTMLDivElement>(null);
@@ -244,7 +244,7 @@ export function Projects() {
             lands in the center band instead). pb-[45vh] is matching tail room so
             the LAST row can also reach the center active zone. */}
         <div className="pb-[45vh] pt-[30vh]">
-          {PROJECTS.map((p) => (
+          {projects.map((p) => (
             <div
               key={p.num}
               data-marquee-row
@@ -278,7 +278,7 @@ export function Projects() {
                 the box (which is itself centered in the column), so cards with
                 different content heights don't sit off-center. */}
             <div className="relative h-96 w-full max-w-sm">
-              {PROJECTS.map((p, i) => (
+              {projects.map((p, i) => (
                 <div
                   key={p.num}
                   ref={(el) => {
@@ -297,7 +297,7 @@ export function Projects() {
                       className="flex flex-col gap-4 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                     >
                       <ThumbnailCard project={p} />
-                      <ProjectMeta index={i} />
+                      <ProjectMeta project={p} />
                     </Link>
                     <GitHubCorner repo={p.repo} name={p.name} />
                   </div>
@@ -310,11 +310,11 @@ export function Projects() {
 
       {/* ================= Mobile: plain revealed blocks ==================== */}
       <div className="flex flex-col gap-16 py-24 lg:hidden">
-        {PROJECTS.map((p, i) => (
+        {projects.map((p) => (
           <div key={p.num} data-project-block className="relative">
             <Link href={`/projects/${p.slug}`} className="flex flex-col gap-4">
               <ThumbnailCard project={p} />
-              <ProjectMeta index={i} />
+              <ProjectMeta project={p} />
             </Link>
             <GitHubCorner repo={p.repo} name={p.name} />
           </div>

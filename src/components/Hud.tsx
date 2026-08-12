@@ -20,13 +20,17 @@ import { gsap } from "@/lib/gsap";
 import { prefersReducedMotion } from "@/lib/animations";
 import { DURATION, EASE } from "@/lib/motion";
 
-const CODING_SINCE_YEAR = "2024";
-
-const TIME_ZONE = "Asia/Dhaka"; // Sylhet, Bangladesh (GMT+6)
-const STATUS_PHRASES = ["BUILDING", "LEARNING", "SHIPPING"];
-
-/** Live HH:MM:SS clock in the owner's timezone + rotating status phrase. */
-export function LiveStatus() {
+/** Live HH:MM:SS clock in the owner's timezone + rotating status phrase. Copy
+ *  (status words, timezone, location label) comes from content/hero. */
+export function LiveStatus({
+  statusWords,
+  timeZone,
+  locationLabel,
+}: {
+  statusWords: string[];
+  timeZone: string;
+  locationLabel: string;
+}) {
   // null until mounted — the server can't know the client's "now", so we render
   // a stable placeholder first to avoid a hydration mismatch.
   const [time, setTime] = useState<string | null>(null);
@@ -36,7 +40,7 @@ export function LiveStatus() {
   // Clock: tick every second.
   useEffect(() => {
     const fmt = new Intl.DateTimeFormat("en-GB", {
-      timeZone: TIME_ZONE,
+      timeZone,
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
@@ -46,14 +50,14 @@ export function LiveStatus() {
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [timeZone]);
 
   // Status phrase: hold → fade out → swap → fade in, on existing tokens.
   useEffect(() => {
     const el = phraseRef.current;
     const holdMs = (DURATION.ghostHold + DURATION.indicatorExit * 2) * 1000;
     const id = setInterval(() => {
-      const next = () => setPhraseIdx((i) => (i + 1) % STATUS_PHRASES.length);
+      const next = () => setPhraseIdx((i) => (i + 1) % statusWords.length);
       if (prefersReducedMotion() || !el) {
         next(); // instant swap, no fade
         return;
@@ -73,24 +77,24 @@ export function LiveStatus() {
       });
     }, holdMs);
     return () => clearInterval(id);
-  }, []);
+  }, [statusWords.length]);
 
   return (
     <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
       <span className="tabular-nums">{time ?? "--:--:--"}</span>
-      <span>Sylhet / GMT+6</span>
+      <span>{locationLabel}</span>
       <span ref={phraseRef} className="text-zinc-300">
-        / {STATUS_PHRASES[phraseIdx]}
+        / {statusWords[phraseIdx]}
       </span>
     </div>
   );
 }
 
-/** Bottom-right "YEAR / CODING SINCE" meta. Year is a flagged placeholder. */
-export function CodingSince() {
+/** Bottom-right "YEAR / CODING SINCE" meta. Year comes from content/hero. */
+export function CodingSince({ year }: { year: string }) {
   return (
     <div className="text-right font-mono text-[10px] uppercase tracking-[0.2em]">
-      <span className="block text-zinc-300">{CODING_SINCE_YEAR}</span>
+      <span className="block text-zinc-300">{year}</span>
       <span className="block text-zinc-600">Coding since</span>
     </div>
   );

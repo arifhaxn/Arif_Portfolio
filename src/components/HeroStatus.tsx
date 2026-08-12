@@ -12,16 +12,23 @@
 import { useEffect, useState } from "react";
 import { ScrambleText } from "@/components/ScrambleText";
 
-const TIME_ZONE = "Asia/Dhaka"; // Sylhet, Bangladesh (GMT+6)
-
-export function HeroStatus() {
+/** About-hero HUD. Copy (location, availability, timezone) comes from content/about. */
+export function HeroStatus({
+  location,
+  availability,
+  timeZone,
+}: {
+  location: string;
+  availability: string;
+  timeZone: string;
+}) {
   // null until mounted — the server can't know the client's "now" (avoids a
   // hydration mismatch); a stable placeholder renders first.
   const [time, setTime] = useState<string | null>(null);
 
   useEffect(() => {
     const fmt = new Intl.DateTimeFormat("en-GB", {
-      timeZone: TIME_ZONE,
+      timeZone,
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
@@ -31,7 +38,7 @@ export function HeroStatus() {
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [timeZone]);
 
   return (
     <div className="flex flex-col items-end gap-2 text-right font-mono uppercase">
@@ -43,7 +50,7 @@ export function HeroStatus() {
         entrance="observer"
         className="text-[10px] tracking-[0.25em] text-zinc-500"
       >
-        Sylhet, BD · GMT+6
+        {location}
       </ScrambleText>
       <span className="mt-1 flex items-center gap-2 text-[10px] tracking-[0.25em] text-zinc-400">
         <span className="relative flex h-1.5 w-1.5">
@@ -51,7 +58,7 @@ export function HeroStatus() {
           <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
         </span>
         <ScrambleText as="span" entrance="observer">
-          Open to work
+          {availability}
         </ScrambleText>
       </span>
     </div>

@@ -21,11 +21,16 @@ import { useRouter } from "next/navigation";
 import { gsap, ScrollTrigger, useGSAP } from "@/lib/gsap";
 import { prefersReducedMotion } from "@/lib/animations";
 import { NEXT_PROJECT } from "@/lib/motion";
-import { nextProject } from "@/lib/projects";
+import type { Project } from "@/lib/projects";
 import { suppressNextPixelReveal } from "@/lib/revealControl";
 
-export function NextProjectChain({ currentSlug }: { currentSlug: string }) {
-  const next = nextProject(currentSlug);
+export function NextProjectChain({
+  next,
+  label,
+}: {
+  next: Project;
+  label: string;
+}) {
   const themeColor = next.themeColor ?? next.accent ?? "#ffffff";
   const router = useRouter();
 
@@ -141,7 +146,7 @@ export function NextProjectChain({ currentSlug }: { currentSlug: string }) {
         </div>
         <div className="whitespace-nowrap">
           <span className="block font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-400">
-            Next project
+            {label}
           </span>
           <span className="block text-2xl font-bold text-white sm:text-3xl">
             {next.name}
@@ -155,7 +160,7 @@ export function NextProjectChain({ currentSlug }: { currentSlug: string }) {
           href={`/projects/${next.slug}`}
           className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.2em] text-zinc-300 transition-colors hover:text-white"
         >
-          Next project: {next.name}
+          {label}: {next.name}
           <span aria-hidden>↓</span>
         </Link>
       </div>

@@ -119,8 +119,12 @@ export const PROJECTS: Project[] = [
   },
 ];
 
-/** The next project in sequence, looping back to the first after the last. */
-export function nextProject(slug: string): Project {
-  const i = PROJECTS.findIndex((p) => p.slug === slug);
-  return PROJECTS[(i + 1) % PROJECTS.length];
+/**
+ * The next project in sequence, looping back to the first after the last.
+ * Pure over the passed list so it works with the Firestore-sourced projects at
+ * runtime and the seed `PROJECTS` array during migration alike.
+ */
+export function nextProject(projects: Project[], slug: string): Project {
+  const i = projects.findIndex((p) => p.slug === slug);
+  return projects[(i + 1) % projects.length];
 }

@@ -1,26 +1,22 @@
 "use client";
 
 // -----------------------------------------------------------------------------
-// /achievements — certificates & credentials
+// AchievementsView — /achievements page body (client)
 // -----------------------------------------------------------------------------
-// Dedicated route (Navbar lives in the root layout, so it persists here). Two
-// layouts, the site's established desktop-rich / mobile-simple split:
+// The full pannable certificate board (desktop) / stacked sections (mobile). All
+// DATA/COPY (eyebrow, heading, subtitle, category order, certificate items) is
+// passed in from the server page (content/achievements in Firestore); the pan /
+// warp / intro / stat-readout behavior is unchanged.
 //
-// Desktop (lg+): a FULL-BLEED board of labelled certificate sections (Hackathons,
-//   Courses, …), each a grid of cards, that the user freely PANS (wheel/trackpad
-//   /drag) via GSAP Observer. The grid glides with inertia, rubber-bands at its
-//   edges, and CONVERGES (scales slightly toward its center) with pan speed — a
-//   "warp back to scroll" feel. Cells render in via a pixelated top-to-bottom
-//   sweep on mount and carry a subtle idle ripple; hovering a cell lifts it and
-//   reveals its label. Following the reference, there's NO top header: the label
-//   sits in the bottom-left HUD corner and the live stats in the bottom-right,
-//   so nothing overlaps the grid and the navbar simply floats over it.
+// Desktop (lg+): a FULL-BLEED board of labelled certificate sections the user
+//   freely PANS via GSAP Observer (inertia, rubber-band, converge-with-speed).
+//   Cells pixel-sweep in on mount + carry a subtle idle ripple; hover reveals the
+//   label. Bottom-left HUD label, bottom-right live stat readout, no top header.
+// Mobile (<lg): pan/warp dropped; sections stack, cards reveal on scroll.
 //
-// Mobile (<lg): pan/warp dropped. Sections stack under an in-flow header, each a
-//   2-column grid whose cards reveal via the shared `scrollReveal` on scroll.
-//
-// The stat readout is REAL: ELAPSED ticks from mount and SWITCHES counts every
-// time the focused cell actually changes.
+// The stat readout is REAL: ELAPSED ticks from mount; SWITCHES counts focus
+// changes. (Those live-stat field labels stay in code — they're structural, not
+// editable page copy.)
 // -----------------------------------------------------------------------------
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
@@ -32,14 +28,11 @@ import {
   scrollReveal,
 } from "@/lib/animations";
 import { ACHIEVE } from "@/lib/motion";
-import {
-  ACHIEVEMENTS,
-  achievementsByCategory,
-  type Achievement,
-} from "@/lib/achievements";
+import { groupByCategory, type Achievement } from "@/lib/achievements";
 import { AchievementCard } from "@/components/AchievementCard";
 import { AchievementModal } from "@/components/AchievementModal";
 import { ScrambleText } from "@/components/ScrambleText";
+import type { AchievementsContent } from "@/lib/content-types";
 
 // Card geometry — kept at the original compact size/spacing. All sections use
 // the same column count so their grids left-align to a consistent width; stacked
@@ -49,12 +42,12 @@ const COLS = 4;
 const CARD_W = 300;
 const CARD_H = 220;
 
-const GROUPS = achievementsByCategory();
-
-export default function AchievementsPage() {
+export function AchievementsView({ content }: { content: AchievementsContent }) {
   const root = useRef<HTMLElement>(null);
   const panViewport = useRef<HTMLDivElement>(null);
   const grid = useRef<HTMLDivElement>(null);
+
+  const GROUPS = groupByCategory(content.items, content.categoryOrder);
 
   // --- Live stat readout (all real) ---
   const [elapsed, setElapsed] = useState(0); // seconds since mount
@@ -139,7 +132,7 @@ export default function AchievementsPage() {
   const mmss = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(
     elapsed % 60,
   ).padStart(2, "0")}`;
-  const certCount = String(ACHIEVEMENTS.length).padStart(3, "0");
+  const certCount = String(content.items.length).padStart(3, "0");
   const switchCount = String(switches).padStart(3, "0");
 
   return (
@@ -202,10 +195,10 @@ export default function AchievementsPage() {
           entrance="observer"
           className="font-mono text-sm font-semibold uppercase tracking-[0.2em] text-white"
         >
-          / Achievements
+          {content.eyebrow}
         </ScrambleText>
         <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
-          — Certificates &amp; credentials
+          {content.subtitle}
         </p>
       </div>
       {/* Bottom-right: live stat readout (3-line, label + value). */}
@@ -227,16 +220,16 @@ export default function AchievementsPage() {
           entrance="observer"
           className="text-xs font-medium uppercase tracking-[0.3em] text-zinc-500"
         >
-          / Achievements
+          {content.eyebrow}
         </ScrambleText>
         <ScrambleText
           as="h1"
           entrance="observer"
           className="mt-2 text-4xl font-semibold tracking-tight"
         >
-          Achievements
+          {content.heading}
         </ScrambleText>
-        <p className="mt-1 text-sm text-zinc-400">— Certificates &amp; credentials</p>
+        <p className="mt-1 text-sm text-zinc-400">{content.subtitle}</p>
         <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
           <span className="tabular-nums text-zinc-300">
             CERTIFICATES {certCount} · ELAPSED {mmss} · SWITCHES {switchCount}

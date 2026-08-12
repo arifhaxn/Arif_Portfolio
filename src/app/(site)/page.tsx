@@ -9,11 +9,13 @@
 
 import { Hero } from "@/components/Hero";
 import { IntroPreloader } from "@/components/IntroPreloader";
+import { getHero } from "@/lib/content";
 
-export default function Home() {
+export default async function Home() {
+  const hero = await getHero();
   return (
     <main className="flex flex-1 flex-col bg-black">
-      <Hero />
+      <Hero hero={hero} />
       {/* First-load entrance: logo cover → docks into the navbar → reveals. */}
       <IntroPreloader />
     </main>

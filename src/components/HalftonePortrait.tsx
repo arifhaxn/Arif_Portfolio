@@ -31,8 +31,6 @@ import { useEffect, useRef, useState } from "react";
 import { gsap } from "@/lib/gsap";
 import { floatLoop, prefersReducedMotion } from "@/lib/animations";
 
-const SRC = "/hero-portrait-cutout.png";
-
 // --- tuned constants (do not "improve" without re-tuning against the source) ---
 const CELL = 4; // source px per dot cell (finer grid = more, smaller dots → sharper)
 const ALPHA_MIN = 140; // skip cells whose avg alpha < ~55% (transparent bg)
@@ -268,7 +266,7 @@ function drawAssemblyFrame(scratch: HTMLCanvasElement, dots: Dots, t: number) {
  * the final image immediately. If the source PNG is missing/undecodable, a
  * clearly-flagged placeholder card stands in instead of crashing.
  */
-export function HalftonePortrait() {
+export function HalftonePortrait({ src }: { src: string }) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [failed, setFailed] = useState(false);
@@ -362,7 +360,7 @@ export function HalftonePortrait() {
     img.onerror = () => {
       if (!cancelled) setFailed(true);
     };
-    img.src = SRC;
+    img.src = src;
 
     // Only re-blit on resize once the assembly has settled; mid-animation resizes
     // just adopt the new backing size on the next frame.
@@ -377,7 +375,7 @@ export function HalftonePortrait() {
       idleTween?.kill();
       ro.disconnect();
     };
-  }, []);
+  }, [src]);
 
   return (
     // Tall, prominent portrait; the parent centers it in the hero. Dots stay

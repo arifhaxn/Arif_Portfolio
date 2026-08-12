@@ -30,6 +30,30 @@ body {
     "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Responsive / mobile "app" foundations                                       */
+/* -------------------------------------------------------------------------- */
+/* Never allow a sideways scroll on any screen (marquees, off-canvas transforms,
+   the odd wide element). `clip` — not `hidden` — so it never creates a scroll
+   container that would break position: sticky or Lenis smooth scroll. Desktop is
+   unaffected (there's nothing overflowing there). */
+html,
+body {
+  overflow-x: clip;
+  max-width: 100%;
+}
+/* Kill the grey tap flash on iOS so buttons/links feel native. */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+/* When launched from the iPhone home screen (standalone), let long content still
+   scroll with momentum. */
+@media (display-mode: standalone) {
+  body {
+    overscroll-behavior-y: none;
+  }
+}
+
 /* Custom cursor (CursorDot): while the dot is active on a fine-pointer device,
    hide the native cursor everywhere — including over links/buttons that set their
    own `cursor` — so the white dot IS the cursor rather than an addition to it. */

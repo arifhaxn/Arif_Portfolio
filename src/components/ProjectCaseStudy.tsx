@@ -38,6 +38,8 @@ import {
 import { PIXEL_SCRUB } from "@/lib/motion";
 import { useSmoothScroll } from "@/components/providers/SmoothScrollProvider";
 import type { Project } from "@/lib/projects";
+import type { CaseStudyCopy } from "@/lib/content-types";
+import { externalHref } from "@/lib/url";
 
 const COLS = PIXEL_SCRUB.cols;
 const WINDOW_ASPECT = 5 / 2; // hero window width:height (matches aspect-[5/2] below)
@@ -54,7 +56,13 @@ const LIGHTBOX_COLS = 48;
 const LIGHTBOX_ROWS = 27;
 const LIGHTBOX_TILES = LIGHTBOX_COLS * LIGHTBOX_ROWS;
 
-export function ProjectCaseStudy({ project }: { project: Project }) {
+export function ProjectCaseStudy({
+  project,
+  copy,
+}: {
+  project: Project;
+  copy: CaseStudyCopy;
+}) {
   const root = useRef<HTMLDivElement>(null);
   const windowRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -77,10 +85,13 @@ export function ProjectCaseStudy({ project }: { project: Project }) {
   const shotCount = String(shots.length).padStart(2, "0");
 
   const rows = [
-    project.role && { label: "Role", value: project.role },
-    project.year && { label: "Year", value: project.year },
-    project.stack?.length && { label: "Stack", value: project.stack.join("   ·   ") },
-    { label: "Note", value: project.description },
+    project.role && { label: copy.metaLabels.role, value: project.role },
+    project.year && { label: copy.metaLabels.year, value: project.year },
+    project.stack?.length && {
+      label: copy.metaLabels.stack,
+      value: project.stack.join("   ·   "),
+    },
+    { label: copy.metaLabels.note, value: project.description },
   ].filter(Boolean) as { label: string; value: string }[];
 
   useGSAP(
@@ -177,7 +188,9 @@ export function ProjectCaseStudy({ project }: { project: Project }) {
       { opacity: 0, y: 12 },
       { opacity: 1, y: 0, duration: 0.45, ease: "power2.out" },
     );
-    return () => tween.kill();
+    return () => {
+      tween.kill();
+    };
   }, [activeShot]);
 
   return (
@@ -195,7 +208,7 @@ export function ProjectCaseStudy({ project }: { project: Project }) {
         </h1>
       </div>
       <div className="pointer-events-none fixed bottom-12 left-1/2 z-10 -translate-x-1/2">
-        <ScrollCue accent={accent} />
+        <ScrollCue accent={accent} label={copy.scrollCue} />
       </div>
 
       {/* First screen — transparent, so the fixed title shows through it. */}
@@ -234,12 +247,12 @@ export function ProjectCaseStudy({ project }: { project: Project }) {
             </div>
           </div>
         ) : (
-          <PlaceholderWindow label="Hero image — coming soon" />
+          <PlaceholderWindow label={copy.heroPlaceholder} />
         )}
       </section>
 
       {/* ── 3 · Overview (title + metadata) ──────────────────────────────── */}
-      <section className="px-6 py-24 sm:px-10">
+      <section className="px-6 pb-24 pt-10 sm:px-10">
         <div
           data-overview
           className="mx-auto grid w-full max-w-6xl items-center gap-x-16 gap-y-14 lg:grid-cols-2"
@@ -274,12 +287,12 @@ export function ProjectCaseStudy({ project }: { project: Project }) {
               ))}
             </dl>
             <a
-              href={project.liveUrl ?? project.repo}
+              href={externalHref(project.liveUrl ?? project.repo)}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-8 inline-flex w-fit items-center gap-2 border-t border-white/10 pt-6 font-mono text-xs uppercase tracking-[0.2em] text-zinc-300 transition-colors hover:text-white"
             >
-              {project.liveUrl ? "Launch Website" : "View Repository"}
+              {project.liveUrl ? copy.launchWebsite : copy.viewRepository}
               <span aria-hidden>↗</span>
             </a>
           </div>
@@ -352,7 +365,7 @@ export function ProjectCaseStudy({ project }: { project: Project }) {
               {/* RIGHT — GitHub button, held at viewport center */}
               <div className="sticky top-0 flex h-screen flex-col items-end justify-center">
                 <a
-                  href={project.repo}
+                  href={externalHref(project.repo)}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`${project.name} on GitHub`}
@@ -367,7 +380,7 @@ export function ProjectCaseStudy({ project }: { project: Project }) {
                     <path d={GITHUB_ICON} />
                   </svg>
                   <span className="font-mono text-sm text-zinc-200 transition-colors group-hover:text-white">
-                    GitHub <span aria-hidden>↗</span>
+                    {copy.githubLabel} <span aria-hidden>↗</span>
                   </span>
                 </a>
               </div>
@@ -380,7 +393,7 @@ export function ProjectCaseStudy({ project }: { project: Project }) {
                   {project.name}
                 </h3>
                 <a
-                  href={project.repo}
+                  href={externalHref(project.repo)}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`${project.name} on GitHub`}
@@ -395,7 +408,7 @@ export function ProjectCaseStudy({ project }: { project: Project }) {
                     <path d={GITHUB_ICON} />
                   </svg>
                   <span className="font-mono text-xs uppercase tracking-[0.2em] text-zinc-300 transition-colors group-hover:text-white">
-                    GitHub
+                    {copy.githubLabel}
                   </span>
                 </a>
               </div>
@@ -432,7 +445,7 @@ export function ProjectCaseStudy({ project }: { project: Project }) {
           </>
         ) : (
           <div className="mx-auto max-w-4xl">
-            <PlaceholderWindow label="Gallery — coming soon" />
+            <PlaceholderWindow label={copy.galleryPlaceholder} />
           </div>
         )}
       </section>
@@ -578,14 +591,14 @@ function GalleryLightbox({
 }
 
 /** Accent-themed animated scroll-down indicator (a segment sliding down a track). */
-function ScrollCue({ accent }: { accent: string }) {
+function ScrollCue({ accent, label }: { accent: string; label: string }) {
   return (
     <div
       className="pointer-events-none flex flex-col items-center gap-3"
       style={{ color: accent }}
     >
       <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">
-        Scroll
+        {label}
       </span>
       <span className="relative block h-12 w-px overflow-hidden">
         <span className="absolute inset-0 bg-current opacity-20" />

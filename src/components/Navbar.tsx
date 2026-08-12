@@ -23,28 +23,25 @@ import { navIntro } from "@/lib/animations";
 import { ScrambleText } from "@/components/ScrambleText";
 import { useHeadScan } from "@/components/providers/HeadScanProvider";
 import { getLenis } from "@/components/providers/SmoothScrollProvider";
+import type { NavbarContent } from "@/lib/content-types";
 
 // Navbar is global (root layout), so the homepage-section links use a "/#anchor"
 // form: from any route a native <Link> navigates HOME and then scrolls to the
 // anchor (Next.js handles both in one client transition). "Achievements" is now
 // its own real route.
 //
-// Layout: left corner [Contact, About] · centered AH mark · right corner
-// [Projects, Achievements].
-const LEFT_LINKS = [
-  { label: "Contact", href: "/about#contact" },
-  { label: "About", href: "/about" },
-];
-const RIGHT_LINKS = [
-  { label: "Projects", href: "/projects" },
-  { label: "Achievements", href: "/achievements" },
-];
-
-export function Navbar() {
+// Content (wordmark + links) is sourced from Firestore (content/navbar) and
+// passed in from the server layout. Layout stays: left corner [Contact, About] ·
+// centered AH mark · right corner [Projects, Achievements] — the corner is chosen
+// by each link's `side`.
+export function Navbar({ nav }: { nav: NavbarContent }) {
   const root = useRef<HTMLElement>(null);
   const router = useRouter();
   const pathname = usePathname();
   const headScan = useHeadScan();
+
+  const leftLinks = nav.links.filter((l) => l.side === "left");
+  const rightLinks = nav.links.filter((l) => l.side === "right");
 
   const handleNav = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     // Let modified clicks (new tab, etc.) behave natively.
@@ -92,11 +89,13 @@ export function Navbar() {
   return (
     <header
       ref={root}
-      className="fixed inset-x-0 top-0 z-50 flex items-center justify-between px-6 py-5 sm:px-10"
+      // pt clears the notch/status bar when launched standalone (env() is 0 on
+      // desktop + non-notched screens, so the normal 1.25rem spacing is unchanged).
+      className="fixed inset-x-0 top-0 z-50 flex items-center justify-between px-6 pb-5 pt-[calc(1.25rem+env(safe-area-inset-top))] sm:px-10"
     >
       {/* Left corner — Contact, About */}
       <nav className="flex items-center gap-6 sm:gap-8">
-        {LEFT_LINKS.map((link) => (
+        {leftLinks.map((link) => (
           <Link
             key={link.href}
             data-nav-item
@@ -115,14 +114,14 @@ export function Navbar() {
       <Link
         data-nav-item
         href="/"
-        aria-label="Home"
+        aria-label={nav.wordmark.homeAriaLabel}
         onClick={(e) => handleNav(e, "/")}
         className="absolute left-1/2 -translate-x-1/2"
       >
         <Image
           data-nav-logo
-          src="/arif-logo.png"
-          alt="Arif Hasan"
+          src={nav.wordmark.logo}
+          alt={nav.wordmark.alt}
           width={56}
           height={56}
           priority
@@ -132,7 +131,7 @@ export function Navbar() {
 
       {/* Right corner — Projects, Achievements */}
       <nav className="flex items-center gap-6 sm:gap-8">
-        {RIGHT_LINKS.map((link) => (
+        {rightLinks.map((link) => (
           <Link
             key={link.href}
             data-nav-item

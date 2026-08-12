@@ -25,7 +25,7 @@ import Image from "next/image";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { careerLineDraw, prefersReducedMotion } from "@/lib/animations";
 import { CAREER as C } from "@/lib/motion";
-import { CAREER as ENTRIES, type CareerEntry } from "@/lib/career";
+import { type CareerEntry } from "@/lib/career";
 import { ScrambleText } from "@/components/ScrambleText";
 
 const MOBILE_LINE_X = 10; // px from the wrapper's left edge for the mobile line
@@ -37,6 +37,9 @@ type Scene = {
   segs: Seg[];
   total: number;
   reachAt: number[]; // draw fraction at which the line reaches each card
+  // Junction dots — one at EVERY connector endpoint (each card's entry + exit),
+  // each with the draw fraction at which the front reaches it.
+  nodes: { x: number; y: number; reach: number }[];
   cards: HTMLElement[];
 };
 
@@ -62,15 +65,9 @@ function CareerCard({ entry, marker }: { entry: CareerEntry; marker: string }) {
         <div className="flex items-center gap-3">
           <CareerLogo entry={entry} />
           <div className="min-w-0">
-            <ScrambleText as="p" entrance="observer" className="truncate text-sm font-medium text-white">
+            {/* Company name is the box header — larger/prominent. */}
+            <ScrambleText as="p" entrance="observer" className="truncate text-xl font-semibold text-white">
               {entry.company}
-            </ScrambleText>
-            <ScrambleText
-              as="p"
-              entrance="observer"
-              className="font-mono text-[11px] uppercase tracking-[0.15em] text-blue-400"
-            >
-              {entry.title}
             </ScrambleText>
           </div>
         </div>
@@ -78,12 +75,31 @@ function CareerCard({ entry, marker }: { entry: CareerEntry; marker: string }) {
           {entry.period}
         </span>
       </div>
-      <p className="mt-4 text-sm leading-relaxed text-zinc-400">{entry.description}</p>
+      {/* Detail line: the title (blue, prominent) and description (grey) flow
+          together on one line. Either field may be left empty in the admin — fill
+          just one to make the whole line that single colour. */}
+      {(entry.title || entry.description) && (
+        <p className="mt-4 text-sm leading-relaxed">
+          {entry.title && (
+            <span className="font-semibold text-blue-400">{entry.title}</span>
+          )}
+          {entry.title && entry.description ? " " : null}
+          {entry.description && (
+            <span className="text-zinc-400">{entry.description}</span>
+          )}
+        </p>
+      )}
     </article>
   );
 }
 
-export function Career() {
+export function Career({
+  entries: ENTRIES,
+  eyebrow,
+}: {
+  entries: CareerEntry[];
+  eyebrow: string;
+}) {
   const section = useRef<HTMLElement>(null);
   const wrapper = useRef<HTMLDivElement>(null);
   const segRefs = useRef<(SVGPathElement | null)[]>([]);
@@ -113,7 +129,7 @@ export function Career() {
         });
 
         const segs: Seg[] = [];
-        const nodePos: { x: number; y: number }[] = [];
+        const nodeRaw: { x: number; y: number; cum: number }[] = [];
         let cum = 0;
 
         if (isDesktop) {
@@ -132,23 +148,34 @@ export function Career() {
             path.setAttribute("d", d);
             const len = path.getTotalLength();
             gsap.set(path, { strokeDasharray: len, strokeDashoffset: len });
-            segs.push({ path, len, cumBefore: cum });
+            const cumBefore = cum;
+            segs.push({ path, len, cumBefore });
+            // A dot at BOTH ends of the connector: this card's EXIT (where its
+            // line starts) and the next card's ENTRY (where it arrives) — so every
+            // card whose line leaves it shows a starting dot, not just the first.
+            nodeRaw.push({ x: exitX, y: exitY, cum: cumBefore });
             cum += len;
-            if (j === 0) nodePos.push({ x: exitX, y: exitY }); // first card's exit
-            nodePos.push({ x: dropX, y: dropEndY }); // each next card's entry
+            nodeRaw.push({ x: dropX, y: dropEndY, cum });
           }
         } else {
-          const y0 = m[0]?.cy ?? 0;
-          const yLast = m[m.length - 1]?.cy ?? 0;
-          const path = segRefs.current[0];
-          if (path) {
-            path.setAttribute("d", `M ${MOBILE_LINE_X} ${y0} V ${yLast}`);
-            const len = Math.max(path.getTotalLength(), 1);
-            gsap.set(path, { strokeDasharray: len, strokeDashoffset: len });
-            segs.push({ path, len, cumBefore: 0 });
-            cum = len;
+          // A single stacked card has no span to draw a line down (and zero
+          // entries none at all), so only build the connector for 2+ cards —
+          // otherwise a zero-length path would leave the leading tip stranded.
+          if (m.length > 1) {
+            const y0 = m[0].cy;
+            const yLast = m[m.length - 1].cy;
+            const path = segRefs.current[0];
+            if (path) {
+              path.setAttribute("d", `M ${MOBILE_LINE_X} ${y0} V ${yLast}`);
+              const len = Math.max(path.getTotalLength(), 1);
+              gsap.set(path, { strokeDasharray: len, strokeDashoffset: len });
+              segs.push({ path, len, cumBefore: 0 });
+              cum = len;
+            }
           }
-          m.forEach((mm) => nodePos.push({ x: MOBILE_LINE_X, y: mm.cy }));
+          m.forEach((mm) =>
+            nodeRaw.push({ x: MOBILE_LINE_X, y: mm.cy, cum: mm.cy - (m[0]?.cy ?? 0) }),
+          );
         }
 
         // Clear any unused connector paths (mobile uses one; desktop uses n-1).
@@ -164,19 +191,41 @@ export function Career() {
             : (m[i].cy - (m[0]?.cy ?? 0)) / total,
         );
 
-        // Position the nodes + present-pulse.
-        nodePos.forEach((pos, i) => {
+        // Each junction's draw-fraction (reach) = its position along the
+        // cumulative line length, so it lights exactly as the front passes it.
+        const nodes = nodeRaw.map((nd) => ({
+          x: nd.x,
+          y: nd.y,
+          reach: nd.cum / total,
+        }));
+
+        // Position the node dots + present-pulse. A single desktop entry has no
+        // junctions — hide any node refs (and the pulse) not positioned this pass
+        // so an unplaced circle can't render at the SVG origin (0,0). `visibility`
+        // (not `opacity`) so it survives render()'s per-frame opacity writes and
+        // the pulse's CSS keyframe animation.
+        nodes.forEach((pos, i) => {
           const nd = nodeRefs.current[i];
           if (nd) {
             nd.setAttribute("cx", String(pos.x));
             nd.setAttribute("cy", String(pos.y));
+            nd.style.visibility = "";
           }
         });
-        if (pulseRef.current && nodePos[0]) {
-          pulseRef.current.setAttribute("cx", String(nodePos[0].x));
-          pulseRef.current.setAttribute("cy", String(nodePos[0].y));
+        for (let i = nodes.length; i < nodeRefs.current.length; i++) {
+          const nd = nodeRefs.current[i];
+          if (nd) nd.style.visibility = "hidden";
         }
-        return { segs, total, reachAt, cards };
+        if (pulseRef.current) {
+          if (nodes[0]) {
+            pulseRef.current.setAttribute("cx", String(nodes[0].x));
+            pulseRef.current.setAttribute("cy", String(nodes[0].y));
+            pulseRef.current.style.visibility = "";
+          } else {
+            pulseRef.current.style.visibility = "hidden";
+          }
+        }
+        return { segs, total, reachAt, nodes, cards };
       };
 
       const revealDir = (isDesktop: boolean, i: number) =>
@@ -208,7 +257,7 @@ export function Career() {
 
         // Paint everything from one progress value.
         const render = (p: number) => {
-          const { segs, total, reachAt, cards } = scene;
+          const { segs, total, reachAt, nodes, cards } = scene;
           const globalLen = clamp(p, 0, 1) * total;
           // Draw each connector segment in sequence (cumulative length).
           segs.forEach((s) => {
@@ -230,15 +279,9 @@ export function Career() {
               tip.style.opacity = "0";
             }
           }
-          // Nodes light up + cards reveal as the line reaches each.
+          // Cards reveal + take focus as the draw reaches each.
           let active = -1;
           reachAt.forEach((ra, i) => {
-            const nd = nodeRefs.current[i];
-            if (nd) {
-              const amt = clamp((p - (ra - 0.02)) / 0.05, 0, 1);
-              nd.setAttribute("r", String(C.node + (C.nodeFlare - C.node) * amt));
-              nd.style.opacity = String(0.28 + 0.72 * amt);
-            }
             if (!revealed[i] && p >= Math.max(0, ra - 0.06)) {
               revealed[i] = true;
               playReveal(i);
@@ -249,9 +292,20 @@ export function Career() {
             cards.forEach((c, i) => c.classList.toggle("is-active", i === active));
             prevActive = active;
           }
+          // Junction dots light up as the front passes each connection point (both
+          // the exit and entry of every connector).
+          nodes.forEach((node, i) => {
+            const nd = nodeRefs.current[i];
+            if (!nd) return;
+            const amt = clamp((p - (node.reach - 0.02)) / 0.05, 0, 1);
+            nd.setAttribute("r", String(C.node + (C.nodeFlare - C.node) * amt));
+            nd.style.opacity = String(0.28 + 0.72 * amt);
+          });
         };
 
-        let anim = careerLineDraw(sec, render);
+        // End the draw as the LAST card reaches mid-screen (see careerLineDraw).
+        const lastCard = () => scene.cards[scene.cards.length - 1];
+        let anim = careerLineDraw(sec, render, lastCard());
 
         const redraw = () => {
           anim?.scrollTrigger?.kill();
@@ -262,7 +316,7 @@ export function Career() {
             if (reduced || revealed[i]) rest(card);
             else gsap.set(card, { opacity: 0, x: revealDir(isDesktop, i) * 30 });
           });
-          anim = careerLineDraw(sec, render);
+          anim = careerLineDraw(sec, render, lastCard());
         };
         const settle = gsap.delayedCall(0.35, redraw);
         let resizeId = 0;
@@ -298,7 +352,7 @@ export function Career() {
           entrance="observer"
           className="mb-16 font-mono text-xs uppercase tracking-[0.3em] text-blue-400"
         >
-          — Career
+          {eyebrow}
         </ScrambleText>
 
         <div ref={wrapper} className="relative mx-auto max-w-5xl">
@@ -320,8 +374,11 @@ export function Career() {
             ))}
             {/* Present-node pulse (behind the node dot). */}
             <circle ref={pulseRef} className="career-node-pulse" fill={C.color} r={C.nodeFlare} />
-            {/* A node where the line meets each card. */}
-            {ENTRIES.map((_, i) => (
+            {/* A dot at EVERY connector endpoint — each card's entry AND exit.
+                Up to 2·(n−1) on desktop, n on mobile; unused ones stay hidden. */}
+            {Array.from({
+              length: Math.max(ENTRIES.length, (ENTRIES.length - 1) * 2),
+            }).map((_, i) => (
               <circle
                 key={`n${i}`}
                 ref={(el) => {

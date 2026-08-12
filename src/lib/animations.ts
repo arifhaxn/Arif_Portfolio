@@ -258,9 +258,16 @@ export function pixelScrubReveal(opts: {
 
   const { band, jitter, cellScale, coverScale } = PIXEL_SCRUB;
   // Per-cell vertical position (0 top → 1 bottom) + random jitter → ragged band.
+  // Clamped to [0,1]: without this the top row's negative-jitter cells sit ABOVE
+  // the image and the bottom row's positive-jitter cells BELOW it, so at the
+  // fully-covered start/end the band edge still overlaps them and the image peeks
+  // through the top (before) and bottom (after). Clamping pins only those extreme
+  // rows flush to the edge; the middle rows keep full jitter, so the visible sweep
+  // is unchanged.
   const pos = cells.map((_, i) => {
     const rowFrac = rows > 1 ? Math.floor(i / cols) / (rows - 1) : 0;
-    return rowFrac + (Math.random() - 0.5) * jitter;
+    const jittered = rowFrac + (Math.random() - 0.5) * jitter;
+    return jittered < 0 ? 0 : jittered > 1 ? 1 : jittered;
   });
 
   // `line` is the clear band's center; cells within `band` of it clear.
@@ -1010,6 +1017,7 @@ export function columnParallax(column: Target, speed: number) {
 export function careerLineDraw(
   trigger: gsap.DOMTarget,
   render: (progress: number) => void,
+  endTrigger?: gsap.DOMTarget,
 ): gsap.core.Tween | undefined {
   if (prefersReducedMotion()) {
     render(1);
@@ -1023,7 +1031,13 @@ export function careerLineDraw(
     scrollTrigger: {
       trigger,
       start: CAREER.start,
-      end: CAREER.end,
+      // When a last-card element is given, finish the draw as THAT card reaches
+      // the middle of the screen (so the line "arrives" at the final card as it
+      // centers), rather than at a fixed point relative to the whole section.
+      // Falls back to the section-relative end otherwise.
+      ...(endTrigger
+        ? { endTrigger, end: CAREER.endAtCard }
+        : { end: CAREER.end }),
       scrub: CAREER.scrub,
     },
     onUpdate: () => render(state.p),
@@ -1130,7 +1144,9 @@ export function achievementsGridIntro(cells: Target) {
   const arr = gsap.utils.toArray<HTMLElement>(cells);
   if (!arr.length) return gsap.timeline();
   if (prefersReducedMotion())
-    return gsap.set(arr, { opacity: 1, clipPath: "inset(0% 0% 0% 0%)" });
+    // No clip at rest — otherwise a hovered card's scale-up is chopped to the
+    // cell's square bounds (see onComplete below).
+    return gsap.set(arr, { opacity: 1, clipPath: "none" });
 
   const tops = arr.map((el) => el.offsetTop);
   const maxTop = Math.max(...tops, 1);
@@ -1145,6 +1161,10 @@ export function achievementsGridIntro(cells: Target) {
       // Delay = vertical position (top→bottom) + random scatter → pixelated feel.
       stagger: (i) =>
         (tops[i] / maxTop) * ACHIEVE.introSweep + Math.random() * ACHIEVE.introJitter,
+      // Once revealed, drop the clip entirely: a hovered card scales UP beyond its
+      // cell, and a lingering square inset() clip would chop that overflow to the
+      // cell's square bounds (squaring the corners + hiding the zoom on hover).
+      onComplete: () => gsap.set(arr, { clipPath: "none" }),
     },
   );
 }

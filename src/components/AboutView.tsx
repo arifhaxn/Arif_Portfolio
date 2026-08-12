@@ -1,20 +1,24 @@
 "use client";
 
 // -----------------------------------------------------------------------------
-// /about — portrait hero + description + skills + contact
+// AboutView — /about page body (client)
 // -----------------------------------------------------------------------------
-// Its own route (nav "About" → /about). Structure, per the references:
+// The interactive About experience: portrait hero + curtain reveal → career
+// timeline → skills → contact. All COPY/DATA is passed in from the server page
+// (sourced from Firestore: content/about, content/hero, content/career,
+// content/footer); everything else — the pin/curtain choreography, marquee,
+// scroll math, layout, motion tokens — is unchanged from before.
+//
+// Structure, per the references:
 //   1. Hero — halftone-dot portrait centered, name in the bottom-left, a
 //      "scroll" cue, coding-since bottom-right.
 //   2. Description — headline + bio on the LEFT, the android (robot) on the RIGHT.
-//   3. Skills — big-title blocks (index — / Category / items), one per group.
-//   4. Contact — giant email, a scrolling tag ribbon, copy-email + socials.
-//
-// ⚠ PLACEHOLDER: the description headline/bio copy is still a stand-in to be
-// replaced in the owner's voice.
+//   3. Career — branching scroll-drawn timeline (see <Career>).
+//   4. Skills — big-title blocks (index — / Category / items), one per group.
+//   5. Contact — giant email, a scrolling tag ribbon, copy-email + socials.
 // -----------------------------------------------------------------------------
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { gsap, ScrollTrigger, useGSAP } from "@/lib/gsap";
 import {
@@ -29,8 +33,14 @@ import { HalftonePortrait } from "@/components/HalftonePortrait";
 import { HeroStatus } from "@/components/HeroStatus";
 import { CodingSince } from "@/components/Hud";
 import { useSmoothScroll } from "@/components/providers/SmoothScrollProvider";
-import { CONTACT_EMAIL, CONTACT_TAGS, SKILLS, SOCIALS } from "@/lib/about";
 import { ABOUT_PANEL } from "@/lib/motion";
+import { externalHref } from "@/lib/url";
+import type {
+  AboutContent,
+  CareerContent,
+  FooterContent,
+  HeroContent,
+} from "@/lib/content-types";
 
 const HeroHead = dynamic(
   () => import("@/components/HeroHead").then((m) => m.HeroHead),
@@ -41,19 +51,35 @@ const HeroHead = dynamic(
 const useIsoLayoutEffect =
   typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
-export default function AboutPage() {
+export function AboutView({
+  about,
+  hero,
+  career,
+  footer,
+}: {
+  about: AboutContent;
+  hero: HeroContent;
+  career: CareerContent;
+  footer: FooterContent;
+}) {
   const root = useRef<HTMLElement>(null);
   const heroRef = useRef<HTMLElement>(null);
   const dimRef = useRef<HTMLDivElement>(null);
   const curtainRef = useRef<HTMLDivElement>(null);
-  const [copied, setCopied] = useState(false);
   // Read Lenis through a ref so the pin setup can run ONCE (stable deps) yet the
   // remeasure below still sees the live instance once it mounts. Depending on
   // `lenis` directly would re-run useGSAP on the null→instance swap and stack a
   // second pin-spacer (doubling the pinned scroll distance).
   const lenis = useSmoothScroll();
   const lenisRef = useRef(lenis);
+  // Keep the latest Lenis instance readable from the (stable-deps) pin setup and
+  // its delayed remeasures — see the note on lenisRef above. This mirrors the
+  // original /about page's pattern exactly (kept for byte-identical behavior).
+  // eslint-disable-next-line react-hooks/refs
   lenisRef.current = lenis;
+
+  // Giant email split so the "@" can carry the blue accent, exactly as before.
+  const [emailLocal, emailDomain] = footer.email.split("@");
 
   useGSAP(
     () => {
@@ -132,13 +158,6 @@ export default function AboutPage() {
     };
   }, []);
 
-  const copyEmail = () => {
-    navigator.clipboard?.writeText(CONTACT_EMAIL).then(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1800);
-    });
-  };
-
   return (
     <main ref={root} className="bg-black text-white">
       {/* =================== 1 · HERO + reveal curtain ==================== */}
@@ -154,7 +173,7 @@ export default function AboutPage() {
             low. Nudged slightly right so it reads centered against the big
             bottom-left nameplate. */}
         <div className="pointer-events-none absolute inset-0 z-0 flex translate-x-[1.5vw] items-center justify-center">
-          <HalftonePortrait />
+          <HalftonePortrait src={hero.portraitImage} />
         </div>
 
         {/* Name (bottom-left, over the portrait), like the reference. */}
@@ -164,28 +183,31 @@ export default function AboutPage() {
             entrance="observer"
             className="font-mono text-xs uppercase tracking-[0.3em] text-blue-400"
           >
-            / Full-Stack Developer
+            {hero.eyebrow}
           </ScrambleText>
           <h1 className="mt-3 font-[family-name:var(--font-relidux)] text-5xl uppercase leading-[0.95] tracking-[0.03em] sm:text-7xl">
-            <ScrambleText as="span" entrance="observer" className="block">
-              Arif
-            </ScrambleText>
-            <ScrambleText as="span" entrance="observer" className="block">
-              Hasan
-            </ScrambleText>
+            {hero.name.split(/\s+/).map((word, i) => (
+              <ScrambleText as="span" entrance="observer" key={i} className="block">
+                {word}
+              </ScrambleText>
+            ))}
           </h1>
         </div>
 
         {/* Live status HUD — fills the right side (mid-right, right-aligned). */}
         <div className="pointer-events-none absolute right-6 top-1/2 z-10 -translate-y-1/2 sm:right-10">
-          <HeroStatus />
+          <HeroStatus
+            location={about.heroStatus.location}
+            availability={about.heroStatus.availability}
+            timeZone={about.heroStatus.timeZone}
+          />
         </div>
 
         {/* Scroll cue — animated sliding segment (same motion as the projects
             section's case-study cue). Sits above the portrait (z-20). */}
         <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-3 text-blue-400">
           <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">
-            Scroll
+            {about.heroStatus.scrollCue}
           </span>
           <span className="relative block h-12 w-px overflow-hidden">
             <span className="absolute inset-0 bg-current opacity-20" />
@@ -193,7 +215,7 @@ export default function AboutPage() {
           </span>
         </div>
         <div className="absolute bottom-10 right-6 sm:right-10">
-          <CodingSince />
+          <CodingSince year={hero.hud.codingSinceYear} />
         </div>
         </div>
         {/* --- end fixed portrait screen --- */}
@@ -246,20 +268,24 @@ export default function AboutPage() {
           <div className="mx-auto grid max-w-6xl items-center gap-12 px-6 py-24 sm:px-10 lg:h-full lg:grid-cols-2 lg:py-0">
             {/* LEFT — headline + bio */}
             <div data-desc className="flex flex-col gap-8">
-              {/* ⚠ headline copy is a placeholder — tune to taste. */}
               <h2 className="font-[family-name:var(--font-relidux)] text-4xl uppercase leading-[1.02] tracking-[0.03em] sm:text-6xl">
-                A full-stack dev
-                <br />
-                fueled by <span className="text-blue-500">code</span> &amp;{" "}
-                <span className="text-blue-500">craft</span>
+                {about.descriptionHeading.map((line, li) => (
+                  <Fragment key={li}>
+                    {li > 0 && <br />}
+                    {line.segments.map((seg, si) =>
+                      seg.accent ? (
+                        <span key={si} className="text-blue-500">
+                          {seg.text}
+                        </span>
+                      ) : (
+                        <Fragment key={si}>{seg.text}</Fragment>
+                      ),
+                    )}
+                  </Fragment>
+                ))}
               </h2>
               <div className="max-w-md text-sm leading-relaxed text-zinc-400 sm:text-base">
-                <p>
-                  Full-stack developer based in Sylhet, Bangladesh, with a BSc in
-                  Computer Science &amp; Engineering. I build mobile-first products
-                  with Flutter and Dart, backed by Node.js, Firebase, and MongoDB —
-                  always building, always learning, always shipping.
-                </p>
+                <p>{about.bio}</p>
               </div>
             </div>
 
@@ -286,7 +312,7 @@ export default function AboutPage() {
       {/* ===================== 2.5 · CAREER TIMELINE ====================== */}
       {/* Placed directly below the description (per request) — bio → career →
           skills → contact. Branching scroll-drawn timeline; see <Career>. */}
-      <Career />
+      <Career entries={career.items} eyebrow={career.eyebrow} />
 
       {/* ============================ 3 · SKILLS ========================== */}
       <section className="relative border-t border-white/5 px-6 py-24 sm:px-10">
@@ -296,10 +322,10 @@ export default function AboutPage() {
             entrance="observer"
             className="mb-16 font-mono text-xs uppercase tracking-[0.3em] text-blue-400"
           >
-            — Skills
+            {about.skillsEyebrow}
           </ScrambleText>
           <div className="grid gap-x-12 gap-y-16 sm:grid-cols-2">
-            {SKILLS.map((cat, i) => (
+            {about.skills.map((cat, i) => (
               <div key={cat.label} data-skill className="flex flex-col gap-3">
                 {/* Small eyebrow — index + category name (the former big title). */}
                 <h3 className="font-mono text-xs uppercase tracking-[0.2em] text-zinc-500">
@@ -320,23 +346,26 @@ export default function AboutPage() {
       </section>
 
       {/* =========================== 4 · CONTACT ========================== */}
+      {/* Full-viewport: always fills the screen regardless of content length. */}
       <section
         id="contact"
-        className="relative scroll-mt-24 border-t border-white/5 px-6 pb-24 pt-24 sm:px-10"
+        className="relative flex min-h-screen scroll-mt-24 flex-col justify-center border-t border-white/5 px-6 py-24 sm:px-10"
       >
-        <div className="mx-auto max-w-6xl">
+        <div className="mx-auto w-full max-w-6xl">
           {/* labels */}
           <div className="flex items-center justify-between font-mono text-xs uppercase tracking-[0.3em] text-blue-400">
-            <span>— Get in touch</span>
-            <span className="hidden sm:inline">Now accepting inquiries</span>
+            <span>{footer.eyebrow}</span>
+            <span className="hidden sm:inline">{footer.note}</span>
           </div>
 
-          {/* giant email */}
+          {/* giant email — a real mailto link; opens the default mail client. */}
           <a
-            href={`mailto:${CONTACT_EMAIL}`}
-            className="mt-14 block break-words text-[clamp(1.75rem,6.5vw,4.75rem)] font-semibold leading-none tracking-tight text-white transition-colors hover:text-zinc-300"
+            href={`mailto:${footer.email}`}
+            className="mt-14 block w-fit cursor-pointer break-words text-[clamp(1.75rem,6.5vw,4.75rem)] font-semibold leading-none tracking-tight text-white transition-colors hover:text-zinc-300"
           >
-            arifhasan.connect<span className="text-blue-500">@</span>gmail.com
+            {emailLocal}
+            <span className="text-blue-500">@</span>
+            {emailDomain}
           </a>
 
           {/* scrolling tag ribbon */}
@@ -345,7 +374,7 @@ export default function AboutPage() {
               data-marquee
               className="flex w-max whitespace-nowrap font-mono text-xs uppercase tracking-[0.2em] text-zinc-500"
             >
-              {[...CONTACT_TAGS, ...CONTACT_TAGS].map((tag, i) => (
+              {[...footer.tags, ...footer.tags].map((tag, i) => (
                 <span key={i} className="flex items-center">
                   <span className="mx-6 text-blue-500">•</span>
                   {tag}
@@ -354,33 +383,40 @@ export default function AboutPage() {
             </div>
           </div>
 
-          {/* copy email + socials + sign-off */}
-          <div className="mt-14 flex flex-wrap items-center justify-between gap-y-8">
-            <div className="flex flex-wrap items-center gap-8">
-              <button
-                type="button"
-                onClick={copyEmail}
-                className="bg-blue-500 px-6 py-3 font-mono text-xs font-semibold uppercase tracking-[0.2em] text-black transition-colors hover:bg-blue-400"
+          {/* Four brand tiles — span the FULL width in equal columns (2×2 on
+              narrow viewports). Icon path + label come from content/footer (CMS).
+              Resting: black with a soft grey border (matching the site's card
+              rings); hover brightens the border, reveals the card gradient, and
+              lifts slightly (reduced-motion safe). */}
+          <div className="mt-16 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+            {footer.socialLinks.map((s) => (
+              <a
+                key={s.label}
+                href={externalHref(s.href)}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={s.label}
+                className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-white/15 bg-black px-4 py-7 transition-[scale,border-color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] hover:border-blue-500 motion-safe:hover:scale-[1.06]"
               >
-                {copied ? "Copied ✓" : "Copy email"}
-              </button>
-              {SOCIALS.map((s) => (
-                <a
-                  key={s.label}
-                  href={s.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono text-xs uppercase tracking-[0.2em] text-zinc-400 transition-colors hover:text-white"
+                {/* Gradient wash on its own rounded layer (no overflow clip, so the
+                    zoom can't square the corners) — fades in smoothly on hover. */}
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-br from-zinc-900 via-zinc-950 to-black opacity-0 transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:opacity-100"
+                />
+                <svg
+                  viewBox="0 0 24 24"
+                  aria-hidden
+                  fill="currentColor"
+                  className="relative h-7 w-7 text-zinc-300 transition-colors duration-500 group-hover:text-white"
                 >
-                  {s.label} ↗
-                </a>
-              ))}
-            </div>
-            <p className="text-right font-mono text-xs uppercase leading-relaxed tracking-[0.2em] text-zinc-500">
-              Arif Hasan
-              <br />
-              Full-Stack Dev
-            </p>
+                  <path d={s.icon} />
+                </svg>
+                <span className="relative font-mono text-xs uppercase tracking-[0.2em] text-zinc-300 transition-colors duration-500 group-hover:text-white">
+                  {s.label}
+                </span>
+              </a>
+            ))}
           </div>
         </div>
       </section>

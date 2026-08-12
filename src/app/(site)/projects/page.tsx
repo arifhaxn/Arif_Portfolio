@@ -7,11 +7,13 @@
 // -----------------------------------------------------------------------------
 
 import { Projects } from "@/components/Projects";
+import { getProjects } from "@/lib/content";
 
-export default function ProjectsPage() {
+export default async function ProjectsPage() {
+  const { items } = await getProjects();
   return (
     <main className="flex flex-1 flex-col bg-black">
-      <Projects />
+      <Projects projects={items} />
     </main>
   );
 }

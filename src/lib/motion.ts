@@ -201,7 +201,9 @@ export const PIXEL_SCRUB = {
   jitter: 0.14,
   cellScale: 0.4,
   coverScale: 1.06,
-  runway: "+=90%",
+  // Pinned scroll distance for the band sweep. Kept snug so the covered/black tail
+  // of the sweep + the gap to the Overview below don't force extra dead scrolling.
+  runway: "+=60%",
 } as const;
 
 /**
@@ -367,7 +369,8 @@ export const CAREER = {
   stroke: 2, // line stroke width (px)
   color: "#3b82f6", // flat accent blue (matches card underlines / eyebrows)
   start: "top 72%", // draw begins as the section enters
-  end: "bottom 60%", // draw completes near the section end
+  end: "bottom 60%", // draw completes near the section end (fallback, no last card)
+  endAtCard: "center center", // draw completes as the LAST card centers on screen
   node: 3.5, // base junction-node radius (px, dim/unreached)
   nodeFlare: 6, // lit junction-node radius (px, once the draw front passes)
   tip: 5, // radius of the bright leading tip riding the draw front

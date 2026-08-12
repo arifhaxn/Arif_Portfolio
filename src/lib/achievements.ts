@@ -63,13 +63,19 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "14", title: "Research Certificate 14", issuer: "Journal / Institution", category: "Research" },
 ];
 
-/** Group achievements by category, in CATEGORIES display order (empties dropped). */
-export function achievementsByCategory(): {
-  category: AchievementCategory;
-  items: Achievement[];
-}[] {
-  return CATEGORIES.map((category) => ({
-    category,
-    items: ACHIEVEMENTS.filter((a) => a.category === category),
-  })).filter((g) => g.items.length > 0);
+/**
+ * Group achievements by category, in the given display order (empties dropped).
+ * Pure over its inputs so it works with the Firestore-sourced items + category
+ * order at runtime and the seed arrays during migration alike.
+ */
+export function groupByCategory(
+  items: Achievement[],
+  order: AchievementCategory[],
+): { category: AchievementCategory; items: Achievement[] }[] {
+  return order
+    .map((category) => ({
+      category,
+      items: items.filter((a) => a.category === category),
+    }))
+    .filter((g) => g.items.length > 0);
 }
