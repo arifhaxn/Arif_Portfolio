@@ -309,7 +309,10 @@ export function Projects({ projects }: { projects: Project[] }) {
       </div>
 
       {/* ================= Mobile: plain revealed blocks ==================== */}
-      <div className="flex flex-col gap-16 py-24 lg:hidden">
+      {/* pt clears the fixed navbar, whose height grows by the notch safe-area
+          inset on standalone/notched phones — a flat py-24 let the first card
+          slide under the logo/menu. */}
+      <div className="flex flex-col gap-16 pb-24 pt-[calc(6rem+env(safe-area-inset-top))] lg:hidden">
         {projects.map((p) => (
           <div key={p.num} data-project-block className="relative">
             <Link href={`/projects/${p.slug}`} className="flex flex-col gap-4">

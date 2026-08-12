@@ -361,7 +361,7 @@ export function AboutView({
           {/* giant email — a real mailto link; opens the default mail client. */}
           <a
             href={`mailto:${footer.email}`}
-            className="mt-14 block w-fit cursor-pointer break-words text-[clamp(1.75rem,6.5vw,4.75rem)] font-semibold leading-none tracking-tight text-white transition-colors hover:text-zinc-300"
+            className="mt-14 block max-w-full cursor-pointer break-words [overflow-wrap:anywhere] text-[clamp(1.5rem,6.5vw,4.75rem)] font-semibold leading-tight tracking-tight text-white transition-colors sm:w-fit sm:leading-none hover:text-zinc-300"
           >
             {emailLocal}
             <span className="text-blue-500">@</span>

@@ -106,7 +106,7 @@ export function Hero({ hero }: { hero: HeroContent }) {
           long clock line wrap within the screen instead of overflowing. -------- */}
       <div
         data-hero-line
-        className="absolute left-6 top-20 z-10 max-w-[calc(100%-3rem)] sm:left-10 sm:top-1/2 sm:max-w-none sm:-translate-y-1/2"
+        className="absolute left-6 top-[calc(env(safe-area-inset-top)+6.5rem)] z-10 max-w-[calc(100%-3rem)] sm:left-10 sm:top-1/2 sm:max-w-none sm:-translate-y-1/2"
       >
         <LiveStatus
           statusWords={hero.hud.statusWords}
