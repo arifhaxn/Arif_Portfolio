@@ -194,8 +194,9 @@ export function AboutView({
           </h1>
         </div>
 
-        {/* Live status HUD — fills the right side (mid-right, right-aligned). */}
-        <div className="pointer-events-none absolute right-6 top-1/2 z-10 -translate-y-1/2 sm:right-10">
+        {/* Live status HUD — mid-right on desktop; moved to the top on mobile
+            (below the notch-safe nav) so it clears the centered portrait. */}
+        <div className="pointer-events-none absolute right-6 top-[calc(env(safe-area-inset-top)+6.5rem)] z-10 sm:right-10 sm:top-1/2 sm:-translate-y-1/2">
           <HeroStatus
             location={about.heroStatus.location}
             availability={about.heroStatus.availability}
