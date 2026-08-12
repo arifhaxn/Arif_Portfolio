@@ -99,8 +99,10 @@ export const ScrambleText = forwardRef<ScrambleHandle, ScrambleTextProps>(
       }
 
       tweenRef.current = scrambleText(el, text);
-      // Release the lock once the scramble settles (or is otherwise resolved).
-      tweenRef.current.then(releaseHeight, releaseHeight);
+      // Release the lock once the scramble settles. (A killed/replaced tween never
+      // resolves this promise; those paths clear the lock themselves — the next
+      // scramble re-measures from scratch, and unmount clears it in cleanup.)
+      tweenRef.current.then(releaseHeight).catch(() => {});
     };
 
     // Entrance — idempotent (first call wins).
