@@ -8,22 +8,24 @@
 // wires out to one blue hub per category, each branching to its individual
 // skills; bright pulses travel the links (like the project-card circuit traces),
 // the whole field drifts and repels the cursor (like the robot's particle
-// field), and hovering any node lights up its cluster.
+// field), and moving the cursor NEAR a link lights up its cluster.
 //
 // Behaviors:
 //   • Grow-in reveal — on first scroll into view the nodes spring OUT of the
-//     core along their links (a "graph assembling" moment), then idle-drift.
-//   • Cursor trace — the nearest node's whole category brightens; a corner HUD
-//     readout names it. On touch / no fine pointer, it AUTO-cycles the clusters
-//     so the effect still reads without a cursor.
+//     core along their links, then idle-drift.
+//   • Proximity trace — the link nearest the cursor (and its whole cluster) turns
+//     blue; a corner HUD names it. On touch / no fine pointer, it AUTO-cycles the
+//     clusters so the effect still reads without a cursor.
+//   • Cursor repulsion — nodes near the cursor are pushed away.
 //   • Off-screen the render loop fully stops (IntersectionObserver), matching
 //     HeroHead's frameloop pause — no idle CPU when scrolled away.
+//   • The whole graph is auto-fit inside the canvas (with label padding) so no
+//     node or label is ever clipped, whatever the data or viewport.
 //
 // Adaptive / accessible:
-//   • Device tier (see lib/quality) or prefers-reduced-motion → render the
-//     ORIGINAL clean text grid instead (no canvas, no loop) so weak hardware and
-//     reduced-motion users keep the calm, fast version. Same tiering the 3D and
-//     circuit backgrounds use.
+//   • Device tier (see lib/quality), prefers-reduced-motion, or a phone-width
+//     screen → render the ORIGINAL clean text grid instead (no canvas, no loop).
+//     Same responsive/adaptive degradation the 3D and circuit backgrounds use.
 //   • A visually-hidden list mirrors every skill for screen readers + SEO; the
 //     canvas itself is aria-hidden decoration.
 // -----------------------------------------------------------------------------
@@ -36,24 +38,48 @@ import { ScrambleText } from "@/components/ScrambleText";
 type SkillGroup = { label: string; items: string[] };
 
 const BLUE = "#3b82f6";
+const TAU = Math.PI * 2;
 
 // -----------------------------------------------------------------------------
-// The canvas graph (only mounted on capable devices with motion allowed).
+// The canvas graph (only mounted on capable, wide-enough devices, motion on).
 // -----------------------------------------------------------------------------
 type Node = {
   type: "core" | "hub" | "leaf";
   label: string;
   cat: number; // -1 for the core
+  rx: number; // raw layout x (pre-fit, origin-centered)
+  ry: number;
   x: number;
   y: number;
   vx: number;
   vy: number;
-  hx: number; // home x
-  hy: number; // home y
+  hx: number; // fitted home x
+  hy: number;
   ph: number; // drift phase
   r: number; // base radius
 };
 type Link = { a: Node; b: Node; pulse: number; speed: number };
+
+/** Shortest distance from point (px,py) to the segment a→b. */
+function distToSeg(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len2 = dx * dx + dy * dy || 1;
+  let t = ((px - ax) * dx + (py - ay) * dy) / len2;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const cx = ax + t * dx;
+  const cy = ay + t * dy;
+  const ex = px - cx;
+  const ey = py - cy;
+  return Math.sqrt(ex * ex + ey * ey);
+}
 
 function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -72,9 +98,14 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const finePointer =
-      typeof window !== "undefined" &&
-      window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+    // Match the page's own type (Geist), resolved from the canvas's inherited
+    // font-family, so labels read as part of the site instead of a generic mono.
+    const fontFamily =
+      getComputedStyle(canvas).fontFamily || "system-ui, sans-serif";
+
+    const finePointer = window.matchMedia(
+      "(hover: hover) and (pointer: fine)",
+    ).matches;
 
     let W = 0;
     let H = 0;
@@ -83,8 +114,7 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
     let revealed = false;
     let reveal = 0; // 0→1 grow-in progress
     let t = 0;
-    let lastMove = -1e9; // ms of last pointer activity
-    let now = 0; // accumulated ms (no Date.now — resume-safe not needed here, but keep it frame-derived)
+    let now = 0; // accumulated ms (frame-derived; no Date.now)
 
     const nodes: Node[] = [];
     const links: Link[] = [];
@@ -92,6 +122,8 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
       type: "core",
       label: "ARIF",
       cat: -1,
+      rx: 0,
+      ry: 0,
       x: 0,
       y: 0,
       vx: 0,
@@ -106,111 +138,134 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
     const build = (grow: boolean) => {
       nodes.length = 0;
       links.length = 0;
-      const cx = W * 0.5;
-      const cy = H * 0.5;
-      core.hx = core.x = cx;
-      core.hy = core.y = cy;
       nodes.push(core);
-      const ringR = Math.min(W * 0.42, H * 0.4);
-      const small = W < 640;
+
+      // Raw layout in origin-centered units; the fit pass below scales it into the
+      // canvas, so these are just proportions (hub ring radius vs. leaf reach).
+      const RING = 200;
       skills.forEach((c, i) => {
-        const a = (i / skills.length) * Math.PI * 2 - Math.PI / 2;
-        const hx = cx + Math.cos(a) * ringR;
-        const hy = cy + Math.sin(a) * ringR;
+        const a = (i / skills.length) * TAU - Math.PI / 2;
+        const hrx = Math.cos(a) * RING;
+        const hry = Math.sin(a) * RING;
         const hub: Node = {
           type: "hub",
           label: c.label,
           cat: i,
-          x: grow ? cx : hx,
-          y: grow ? cy : hy,
+          rx: hrx,
+          ry: hry,
+          x: 0,
+          y: 0,
           vx: 0,
           vy: 0,
-          hx,
-          hy,
-          ph: (i * 1.7) % 6.28,
+          hx: 0,
+          hy: 0,
+          ph: (i * 1.7) % TAU,
           r: 5,
         };
         nodes.push(hub);
         links.push({ a: core, b: hub, pulse: (i * 0.37) % 1, speed: 0.16 });
         const n = c.items.length;
-        const leafR = (small ? 44 : 60) + n * 8;
+        const leafR = 96 + n * 14;
         c.items.forEach((s, j) => {
-          const la = a + (j - (n - 1) / 2) * (1.15 / Math.max(n, 2));
-          const lx = hx + Math.cos(la) * leafR;
-          const ly = hy + Math.sin(la) * leafR;
+          const la = a + (j - (n - 1) / 2) * (1.2 / Math.max(n, 2));
           const leaf: Node = {
             type: "leaf",
             label: s,
             cat: i,
-            x: grow ? cx : lx,
-            y: grow ? cy : ly,
+            rx: hrx + Math.cos(la) * leafR,
+            ry: hry + Math.sin(la) * leafR,
+            x: 0,
+            y: 0,
             vx: 0,
             vy: 0,
-            hx: lx,
-            hy: ly,
-            ph: (i * 3 + j) % 6.28,
+            hx: 0,
+            hy: 0,
+            ph: (i * 3 + j) % TAU,
             r: 3,
           };
           nodes.push(leaf);
           links.push({
             a: hub,
             b: leaf,
-            pulse: (i * 2 + j) * 0.19 % 1,
+            pulse: ((i * 2 + j) * 0.19) % 1,
             speed: 0.3 + (j % 3) * 0.08,
           });
         });
       });
+
+      // Auto-fit: scale + center the raw layout into the canvas, leaving margins
+      // for labels (wider on the sides where skill names sit, shorter top/bottom).
+      const padX = W < 820 ? 78 : 116;
+      const padTop = 40;
+      const padBottom = 54;
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (const nd of nodes) {
+        if (nd.rx < minX) minX = nd.rx;
+        if (nd.rx > maxX) maxX = nd.rx;
+        if (nd.ry < minY) minY = nd.ry;
+        if (nd.ry > maxY) maxY = nd.ry;
+      }
+      const availW = W - 2 * padX;
+      const availH = H - padTop - padBottom;
+      const s = Math.min(
+        availW / (maxX - minX || 1),
+        availH / (maxY - minY || 1),
+      );
+      const offX = padX + (availW - (maxX - minX) * s) / 2 - minX * s;
+      const offY = padTop + (availH - (maxY - minY) * s) / 2 - minY * s;
+      for (const nd of nodes) {
+        nd.hx = nd.rx * s + offX;
+        nd.hy = nd.ry * s + offY;
+      }
+      for (const nd of nodes) {
+        if (grow && nd.type !== "core") {
+          nd.x = core.hx;
+          nd.y = core.hy;
+        } else {
+          nd.x = nd.hx;
+          nd.y = nd.hy;
+        }
+        nd.vx = 0;
+        nd.vy = 0;
+      }
     };
 
     const resize = () => {
       const rect = wrap.getBoundingClientRect();
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       W = Math.max(1, rect.width);
-      H = rect.width < 640 ? 520 : 460;
+      H = W >= 1024 ? 600 : 540;
       canvas.style.height = `${H}px`;
       canvas.width = Math.round(W * dpr);
       canvas.height = Math.round(H * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      build(revealed ? false : true);
+      build(!revealed);
     };
 
-    const pad = 16;
+    const pad = 14;
     const clamp = (v: number, lo: number, hi: number) =>
       v < lo ? lo : v > hi ? hi : v;
 
+    const EDGE_HIT = 48; // px: cursor-to-link distance that lights a cluster
     let lastActive = -1;
+
     const draw = (dt: number) => {
       t += dt;
       now += dt * 1000;
       if (!revealed) reveal = 0;
       else if (reveal < 1) reveal = Math.min(1, reveal + dt * 1.1);
+      const ease = reveal * reveal * (3 - 2 * reveal); // smoothstep
 
       ctx.clearRect(0, 0, W, H);
 
-      // faint HUD grid
-      ctx.strokeStyle = "rgba(255,255,255,0.022)";
-      ctx.lineWidth = 1;
-      for (let gx = 0; gx < W; gx += 40) {
-        ctx.beginPath();
-        ctx.moveTo(gx, 0);
-        ctx.lineTo(gx, H);
-        ctx.stroke();
-      }
-      for (let gy = 0; gy < H; gy += 40) {
-        ctx.beginPath();
-        ctx.moveTo(0, gy);
-        ctx.lineTo(W, gy);
-        ctx.stroke();
-      }
-
       // physics: drift toward home + cursor repel, clamped to the canvas
-      const ease = reveal * reveal * (3 - 2 * reveal); // smoothstep
       for (const nd of nodes) {
         if (nd.type === "core") continue;
-        const driftX = Math.cos(t * 0.5 + nd.ph) * 4 * ease;
-        const driftY = Math.sin(t * 0.45 + nd.ph) * 4 * ease;
-        const tx = nd.hx + driftX;
-        const ty = nd.hy + driftY;
+        const tx = nd.hx + Math.cos(t * 0.5 + nd.ph) * 4 * ease;
+        const ty = nd.hy + Math.sin(t * 0.45 + nd.ph) * 4 * ease;
         nd.vx += (tx - nd.x) * 0.02;
         nd.vy += (ty - nd.y) * 0.02;
         if (mouse.active) {
@@ -231,36 +286,31 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
         nd.y = clamp(nd.y + nd.vy, pad, H - pad);
       }
 
-      // active cluster — from the cursor, or auto-cycled when no fine pointer/idle
+      // active cluster — from the LINK nearest the cursor, or auto-cycled on touch
       let activeCat: number | null = null;
-      const idle = now - lastMove > 2600;
-      if (mouse.active && !idle) {
-        let best = 28 * 28;
-        let pick: Node | null = null;
-        for (const nd of nodes) {
-          const dx = nd.x - mouse.x;
-          const dy = nd.y - mouse.y;
-          const d2 = dx * dx + dy * dy;
-          if (d2 < best) {
-            best = d2;
-            pick = nd;
+      if (mouse.active && finePointer && reveal > 0.4) {
+        let minD = EDGE_HIT;
+        for (const l of links) {
+          const d = distToSeg(mouse.x, mouse.y, l.a.x, l.a.y, l.b.x, l.b.y);
+          if (d < minD) {
+            minD = d;
+            activeCat = l.b.cat;
           }
         }
-        if (pick && pick.cat >= 0) activeCat = pick.cat;
-      } else if (reveal > 0.6) {
-        // auto-trace: hold each cluster ~1.8s
-        activeCat = Math.floor(now / 1800) % skills.length;
+      } else if (!finePointer && reveal > 0.6) {
+        activeCat = Math.floor(now / 1900) % skills.length;
       }
 
       // links + travelling pulses
       for (const l of links) {
         const on =
           activeCat != null &&
-          (l.b.cat === activeCat || (l.a.type === "core" && l.b.cat === activeCat));
+          (l.b.cat === activeCat ||
+            (l.a.type === "core" && l.b.cat === activeCat));
         ctx.strokeStyle = on
-          ? "rgba(59,130,246,0.55)"
+          ? "rgba(59,130,246,0.6)"
           : `rgba(96,110,140,${0.16 * reveal})`;
-        ctx.lineWidth = on ? 1.4 : 1;
+        ctx.lineWidth = on ? 1.6 : 1;
         ctx.beginPath();
         ctx.moveTo(l.a.x, l.a.y);
         ctx.lineTo(l.b.x, l.b.y);
@@ -272,7 +322,7 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
           const py = l.a.y + (l.b.y - l.a.y) * l.pulse;
           ctx.fillStyle = on ? "rgba(147,197,253,0.95)" : "rgba(59,130,246,0.5)";
           ctx.beginPath();
-          ctx.arc(px, py, on ? 2.4 : 1.6, 0, 6.283);
+          ctx.arc(px, py, on ? 2.6 : 1.6, 0, TAU);
           ctx.fill();
         }
       }
@@ -282,11 +332,12 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
       ctx.strokeStyle = `rgba(59,130,246,${0.25 + 0.15 * Math.sin(t * 1.6)})`;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(core.x, core.y, pulseR, 0, 6.283);
+      ctx.arc(core.x, core.y, pulseR, 0, TAU);
       ctx.stroke();
 
       // nodes + labels
       ctx.textAlign = "center";
+      ctx.textBaseline = "top";
       for (const nd of nodes) {
         const isActive = activeCat != null && nd.cat === activeCat;
         let col: string;
@@ -294,52 +345,51 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
         let labCol: string;
         let size: number;
         if (nd.type === "core") {
-          col = "#e4e4e7";
+          col = "#f4f4f5";
           lab = nd.label;
-          labCol = "#a1a1aa";
-          size = 10;
+          labCol = "#d4d4d8";
+          size = 13;
         } else if (nd.type === "hub") {
           col = BLUE;
           lab = nd.label.toUpperCase();
-          labCol = isActive ? "#dbeafe" : "#71717a";
-          size = 10;
+          labCol = isActive ? "#dbeafe" : "#a1a1aa";
+          size = 12;
         } else {
-          col = isActive ? "#ffffff" : "#9ca3af";
+          col = isActive ? "#ffffff" : "#d4d4d8";
           lab = nd.label;
-          labCol = isActive ? "#ffffff" : "#52525b";
-          size = W < 640 ? 11 : 12;
+          labCol = isActive ? "#ffffff" : "#a1a1aa";
+          size = 15;
         }
 
+        // highlight halo on the active cluster
         if (isActive) {
           ctx.beginPath();
-          ctx.arc(nd.x, nd.y, nd.r + 7, 0, 6.283);
+          ctx.arc(nd.x, nd.y, nd.r + 7, 0, TAU);
           ctx.fillStyle =
-            nd.type === "leaf" ? "rgba(255,255,255,0.08)" : "rgba(59,130,246,0.14)";
+            nd.type === "leaf"
+              ? "rgba(255,255,255,0.10)"
+              : "rgba(59,130,246,0.16)";
           ctx.fill();
         }
+
         ctx.globalAlpha = nd.type === "core" ? 1 : reveal;
         ctx.beginPath();
-        ctx.arc(nd.x, nd.y, nd.r, 0, 6.283);
+        ctx.arc(nd.x, nd.y, nd.r, 0, TAU);
         ctx.fillStyle = col;
         ctx.fill();
         if (nd.type !== "leaf") {
-          ctx.strokeStyle = "rgba(59,130,246,0.35)";
+          ctx.strokeStyle = "rgba(59,130,246,0.4)";
           ctx.lineWidth = 1;
           ctx.beginPath();
-          ctx.arc(nd.x, nd.y, nd.r + 3, 0, 6.283);
+          ctx.arc(nd.x, nd.y, nd.r + 3, 0, TAU);
           ctx.stroke();
         }
 
-        ctx.font = `${nd.type === "core" ? "700 " : ""}${size}px ui-monospace, Menlo, Consolas, monospace`;
+        // labels — the site's font, bold, offset BELOW the dot (incl. the core,
+        // so "ARIF" no longer overlaps its own node).
+        ctx.font = `700 ${size}px ${fontFamily}`;
         ctx.fillStyle = labCol;
-        ctx.globalAlpha = nd.type === "core" ? 1 : reveal;
-        if (nd.type === "core") {
-          ctx.textBaseline = "middle";
-          ctx.fillText(lab, nd.x, nd.y);
-        } else {
-          ctx.textBaseline = "top";
-          ctx.fillText(lab, nd.x, nd.y + nd.r + 6);
-        }
+        ctx.fillText(lab, nd.x, nd.y + nd.r + 7);
         ctx.globalAlpha = 1;
       }
 
@@ -372,7 +422,6 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
       mouse.x = e.clientX - r.left;
       mouse.y = e.clientY - r.top;
       mouse.active = true;
-      lastMove = now;
     };
     const onLeave = () => {
       mouse.active = false;
@@ -394,7 +443,7 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
           stop();
         }
       },
-      { threshold: 0.08 },
+      { threshold: 0.06 },
     );
     io.observe(wrap);
 
@@ -412,16 +461,12 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
   }, [skills]);
 
   return (
-    <div
-      ref={wrapRef}
-      aria-hidden
-      className="relative overflow-hidden rounded-xl border border-white/10 bg-[#050506]"
-    >
-      {/* corner HUD readouts, matching the site's mono/blue chrome */}
-      <div className="pointer-events-none absolute left-4 top-3 z-10 font-mono text-[10px] uppercase tracking-[0.15em] text-zinc-600">
-        move · hover to trace
+    <div ref={wrapRef} aria-hidden className="relative">
+      {/* corner HUD readouts — the site's mono/blue chrome, no containing box */}
+      <div className="pointer-events-none absolute left-0 top-0 z-10 font-mono text-[10px] uppercase tracking-[0.15em] text-zinc-600">
+        move cursor near a link to trace
       </div>
-      <div className="pointer-events-none absolute right-4 top-3 z-10 text-right font-mono text-[10px] uppercase tracking-[0.15em] text-zinc-600">
+      <div className="pointer-events-none absolute right-0 top-0 z-10 text-right font-mono text-[10px] uppercase tracking-[0.15em] text-zinc-600">
         {activeLabel ? (
           <span className="text-blue-400">› {activeLabel}</span>
         ) : (
@@ -436,7 +481,7 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
 }
 
 // -----------------------------------------------------------------------------
-// The original clean text grid — the low-tier / reduced-motion fallback.
+// The original clean text grid — the low-tier / reduced-motion / phone fallback.
 // -----------------------------------------------------------------------------
 function SkillsTextGrid({ skills }: { skills: SkillGroup[] }) {
   return (
