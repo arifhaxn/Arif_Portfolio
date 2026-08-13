@@ -57,11 +57,13 @@ export function AboutView({
   hero,
   career,
   footer,
+  logo,
 }: {
   about: AboutContent;
   hero: HeroContent;
   career: CareerContent;
   footer: FooterContent;
+  logo: string;
 }) {
   const root = useRef<HTMLElement>(null);
   const heroRef = useRef<HTMLElement>(null);
@@ -327,7 +329,11 @@ export function AboutView({
       {/* ============================ 3 · SKILLS ========================== */}
       {/* Neural / circuit graph of the stack (capable devices); falls back to the
           original clean text grid on low-tier / reduced motion. See the component. */}
-      <SkillsConstellation skills={about.skills} eyebrow={about.skillsEyebrow} />
+      <SkillsConstellation
+        skills={about.skills}
+        eyebrow={about.skillsEyebrow}
+        logo={logo}
+      />
 
       {/* =========================== 4 · CONTACT ========================== */}
       {/* Full-viewport: always fills the screen regardless of content length. */}

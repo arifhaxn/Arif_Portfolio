@@ -8,17 +8,24 @@
 // -----------------------------------------------------------------------------
 
 import { AboutView } from "@/components/AboutView";
-import { getAbout, getCareer, getFooter, getHero } from "@/lib/content";
+import { getAbout, getCareer, getFooter, getHero, getNavbar } from "@/lib/content";
 
 export default async function AboutPage() {
-  const [about, hero, career, footer] = await Promise.all([
+  const [about, hero, career, footer, navbar] = await Promise.all([
     getAbout(),
     getHero(),
     getCareer(),
     getFooter(),
+    getNavbar(),
   ]);
 
   return (
-    <AboutView about={about} hero={hero} career={career} footer={footer} />
+    <AboutView
+      about={about}
+      hero={hero}
+      career={career}
+      footer={footer}
+      logo={navbar.wordmark.logo}
+    />
   );
 }

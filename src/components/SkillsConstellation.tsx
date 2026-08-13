@@ -102,7 +102,7 @@ function distToSeg(
   return Math.sqrt(ex * ex + ey * ey);
 }
 
-function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
+function SkillGraphCanvas({ skills, logo }: { skills: SkillGroup[]; logo: string }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
@@ -127,6 +127,16 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
     const finePointer = window.matchMedia(
       "(hover: hover) and (pointer: fine)",
     ).matches;
+
+    // Logo drawn inside the core. crossOrigin so a Cloudinary-hosted logo can be
+    // drawn (and read back) without tainting the canvas.
+    const logoImg = new Image();
+    logoImg.crossOrigin = "anonymous";
+    let logoReady = false;
+    logoImg.onload = () => {
+      logoReady = true;
+    };
+    logoImg.src = logo;
 
     const sizeOf = (t: Node["type"]) => (t === "core" ? 13 : t === "hub" ? 12 : 15);
 
@@ -154,7 +164,7 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
       hx: 0,
       hy: 0,
       ph: 0,
-      r: 6,
+      r: 20, // big enough to hold the logo; keeps other nodes clear of it
       lw: 0,
       lh: 13,
     };
@@ -434,9 +444,9 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
       for (const l of links) {
         const on = activeCat != null && l.b.cat === activeCat;
         ctx.strokeStyle = on
-          ? "rgba(59,130,246,0.6)"
-          : `rgba(96,110,140,${0.16 * reveal})`;
-        ctx.lineWidth = on ? 1.6 : 1;
+          ? "rgba(96,165,250,0.75)"
+          : `rgba(128,148,182,${0.32 * reveal})`;
+        ctx.lineWidth = on ? 2.6 : 1.7;
         ctx.beginPath();
         ctx.moveTo(l.a.x, l.a.y);
         ctx.lineTo(l.b.x, l.b.y);
@@ -446,34 +456,65 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
           if (l.pulse > 1) l.pulse -= 1;
           const px = l.a.x + (l.b.x - l.a.x) * l.pulse;
           const py = l.a.y + (l.b.y - l.a.y) * l.pulse;
-          ctx.fillStyle = on ? "rgba(147,197,253,0.95)" : "rgba(59,130,246,0.5)";
+          ctx.fillStyle = on ? "rgba(191,219,254,0.98)" : "rgba(96,165,250,0.65)";
           ctx.beginPath();
-          ctx.arc(px, py, on ? 2.6 : 1.6, 0, TAU);
+          ctx.arc(px, py, on ? 3 : 2, 0, TAU);
           ctx.fill();
         }
       }
 
-      // core pulse ring
-      const pulseR = core.r + 6 + Math.sin(t * 1.6) * 3;
-      ctx.strokeStyle = `rgba(59,130,246,${0.25 + 0.15 * Math.sin(t * 1.6)})`;
-      ctx.lineWidth = 1;
+      // --- core: the logo in a glowing, pulsing ring (replaces the ARIF text) ---
+      const CR = core.r;
+      const pulse = 0.5 + 0.5 * Math.sin(t * 1.7);
+      // soft glow halo, breathing
       ctx.beginPath();
-      ctx.arc(core.x, core.y, pulseR, 0, TAU);
+      ctx.arc(core.x, core.y, CR + 9 + pulse * 8, 0, TAU);
+      ctx.fillStyle = `rgba(59,130,246,${0.05 + pulse * 0.13})`;
+      ctx.fill();
+      // an expanding ring that fades outward — the "pulse"
+      const ringP = (t * 0.55) % 1;
+      ctx.beginPath();
+      ctx.arc(core.x, core.y, CR + 2 + ringP * 26, 0, TAU);
+      ctx.strokeStyle = `rgba(59,130,246,${(1 - ringP) * 0.5})`;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      // dark disc backing so the logo reads on any link behind it
+      ctx.beginPath();
+      ctx.arc(core.x, core.y, CR, 0, TAU);
+      ctx.fillStyle = "#08080a";
+      ctx.fill();
+      // the logo, contained (no distortion) + clipped to the circle
+      if (logoReady) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(core.x, core.y, CR - 2, 0, TAU);
+        ctx.clip();
+        const iw = logoImg.naturalWidth || 1;
+        const ih = logoImg.naturalHeight || 1;
+        const boxD = (CR - 3) * 2;
+        const sc = Math.min(boxD / iw, boxD / ih);
+        const dw = iw * sc;
+        const dh = ih * sc;
+        ctx.drawImage(logoImg, core.x - dw / 2, core.y - dh / 2, dw, dh);
+        ctx.restore();
+      }
+      // blue ring border
+      ctx.beginPath();
+      ctx.arc(core.x, core.y, CR, 0, TAU);
+      ctx.strokeStyle = "rgba(59,130,246,0.75)";
+      ctx.lineWidth = 1.6;
       ctx.stroke();
 
       // nodes + labels
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       for (const nd of nodes) {
+        if (nd.type === "core") continue; // core is the logo, drawn above
         const isActive = activeCat != null && nd.cat === activeCat;
         let col: string;
         let lab: string;
         let labCol: string;
-        if (nd.type === "core") {
-          col = "#f4f4f5";
-          lab = nd.label;
-          labCol = "#d4d4d8";
-        } else if (nd.type === "hub") {
+        if (nd.type === "hub") {
           col = BLUE;
           lab = nd.label.toUpperCase();
           labCol = isActive ? "#dbeafe" : "#a1a1aa";
@@ -491,7 +532,7 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
           ctx.fill();
         }
 
-        ctx.globalAlpha = nd.type === "core" ? 1 : reveal;
+        ctx.globalAlpha = reveal;
         ctx.beginPath();
         ctx.arc(nd.x, nd.y, nd.r, 0, TAU);
         ctx.fillStyle = col;
@@ -573,7 +614,7 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
       canvas.removeEventListener("pointermove", onMove);
       canvas.removeEventListener("pointerleave", onLeave);
     };
-  }, [skills, totalSkills]);
+  }, [skills, totalSkills, logo]);
 
   return (
     <div ref={wrapRef} aria-hidden className="relative">
@@ -624,9 +665,12 @@ function SkillsTextGrid({ skills }: { skills: SkillGroup[] }) {
 export function SkillsConstellation({
   skills,
   eyebrow,
+  logo = "/arif-logo.png",
 }: {
   skills: SkillGroup[];
   eyebrow: string;
+  /** Logo drawn in the core (defaults to the site mark; admin logo passed in). */
+  logo?: string;
 }) {
   const [tier, setTier] = useState<QualityTier | null>(null);
   const reduce = useMemo(() => prefersReducedMotion(), []);
@@ -665,7 +709,7 @@ export function SkillsConstellation({
                 </li>
               ))}
             </ul>
-            <SkillGraphCanvas skills={skills} />
+            <SkillGraphCanvas skills={skills} logo={logo} />
           </>
         ) : (
           <SkillsTextGrid skills={skills} />
