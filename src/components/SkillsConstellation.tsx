@@ -176,8 +176,8 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
       if (withSpring) {
         for (const nd of nodes) {
           if (nd.type === "core") continue;
-          nd.x += (nd.ax - nd.x) * 0.03;
-          nd.y += (nd.ay - nd.y) * 0.03;
+          nd.x += (nd.ax - nd.x) * 0.05;
+          nd.y += (nd.ay - nd.y) * 0.05;
         }
       }
       for (let i = 0; i < nodes.length; i++) {
@@ -225,10 +225,13 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
       const minWH = Math.min(W, H);
       skills.forEach((c, i) => {
         const rnd = makeRng(hashStr(c.label) ^ (i * 0x9e3779b1));
-        // uneven angular spacing + varied ring radius = organic, not a clean wheel
-        const a = (i / N) * TAU - Math.PI / 2 + (rnd() - 0.5) * (TAU / N) * 0.55;
-        const ex = W * 0.31 * (0.78 + rnd() * 0.5);
-        const ey = H * 0.31 * (0.78 + rnd() * 0.5);
+        // Even angular coverage (small jitter) so no direction is left empty, but
+        // varied ring radius per hub keeps it asymmetric — not a clean wheel. Hubs
+        // sit fairly close to the core; the fit-to-fill pass below scales the whole
+        // thing up to fill the canvas, so these are proportions, not final sizes.
+        const a = (i / N) * TAU - Math.PI / 2 + (rnd() - 0.5) * (TAU / N) * 0.3;
+        const ex = W * 0.235 * (0.85 + rnd() * 0.4);
+        const ey = H * 0.255 * (0.85 + rnd() * 0.4);
         const hx = cx + Math.cos(a) * ex;
         const hy = cy + Math.sin(a) * ey;
         const hub: Node = {
@@ -257,9 +260,9 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
           const rl = makeRng(hashStr(s) ^ (i * 0x27d4eb2f) ^ (j * 0x165667b1));
           const la =
             outA +
-            (j - (n - 1) / 2) * (1.0 / Math.max(n, 1)) +
-            (rl() - 0.5) * 0.6;
-          const ld = minWH * 0.14 * (0.72 + rl() * 0.7);
+            (j - (n - 1) / 2) * (0.95 / Math.max(n, 1)) +
+            (rl() - 0.5) * 0.5;
+          const ld = minWH * 0.135 * (0.82 + rl() * 0.45);
           const leaf: Node = {
             type: "leaf",
             label: s,
@@ -300,6 +303,43 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
       // guaranteed overlap-free (springs can't tug two labels back together).
       for (let k = 0; k < 220; k++) relaxStep(true);
       for (let k = 0; k < 80; k++) relaxStep(false);
+
+      // Fit-to-fill: uniformly scale the settled layout up around the core so it
+      // fills the canvas (no big empty margins). Scaling only GROWS the gaps
+      // between fixed-size labels, so it can never reintroduce an overlap; and it
+      // preserves the main-line : branch proportion set above.
+      {
+        const cxv = W / 2;
+        const cyv = H / 2;
+        let R = 1;
+        let L = 1;
+        let T = 1;
+        let B = 1;
+        for (const nd of nodes) {
+          const hw = boxHalfW(nd);
+          R = Math.max(R, nd.x + hw - cxv);
+          L = Math.max(L, cxv - (nd.x - hw));
+          T = Math.max(T, cyv - boxTop(nd));
+          B = Math.max(B, boxBot(nd) - cyv);
+        }
+        const m = 12;
+        // Cap the scale so filling the margins doesn't blow the graph up (which
+        // would dwarf the branches next to the main lines).
+        const s = Math.min(
+          1.45,
+          (cxv - m) / L,
+          (cxv - m) / R,
+          (cyv - m) / T,
+          (cyv - m) / B,
+        );
+        if (s > 1.001) {
+          for (const nd of nodes) {
+            if (nd.type === "core") continue;
+            nd.x = cxv + (nd.x - cxv) * s;
+            nd.y = cyv + (nd.y - cyv) * s;
+          }
+        }
+      }
 
       for (const nd of nodes) {
         nd.hx = nd.x;
