@@ -10,24 +10,23 @@
 // the whole field drifts and repels the cursor (like the robot's particle
 // field), and moving the cursor NEAR a link lights up its cluster.
 //
-// Behaviors:
-//   • Grow-in reveal — on first scroll into view the nodes spring OUT of the
-//     core along their links, then idle-drift.
-//   • Proximity trace — the link nearest the cursor (and its whole cluster) turns
-//     blue; a corner HUD names it. On touch / no fine pointer, it AUTO-cycles the
-//     clusters so the effect still reads without a cursor.
-//   • Cursor repulsion — nodes near the cursor are pushed away.
-//   • Off-screen the render loop fully stops (IntersectionObserver), matching
-//     HeroHead's frameloop pause — no idle CPU when scrolled away.
-//   • The whole graph is auto-fit inside the canvas (with label padding) so no
-//     node or label is ever clipped, whatever the data or viewport.
+// Layout is generated, organic, and self-spacing:
+//   • Seeded jitter on every hub/leaf angle + distance → an irregular, neural-net
+//     look rather than a symmetric wheel. Deterministic per skill name, so it's
+//     stable across renders yet reshapes as you add/rename skills.
+//   • A collision-relaxation pass measures each label and pushes nodes apart until
+//     no two label boxes overlap, then clamps everything inside the canvas — so
+//     text never collides, and the whole graph auto-reflows when branches change.
+//   • The layout fills the canvas's wide aspect, and the canvas grows taller with
+//     the node count, so there's always room.
 //
-// Adaptive / accessible:
-//   • Device tier (see lib/quality), prefers-reduced-motion, or a phone-width
-//     screen → render the ORIGINAL clean text grid instead (no canvas, no loop).
-//     Same responsive/adaptive degradation the 3D and circuit backgrounds use.
-//   • A visually-hidden list mirrors every skill for screen readers + SEO; the
-//     canvas itself is aria-hidden decoration.
+// Behaviors: grow-in reveal from the core, cursor-proximity trace (nearest link's
+// cluster lights blue; auto-cycles on touch), cursor repulsion, and a render loop
+// that fully stops off-screen (IntersectionObserver), like HeroHead.
+//
+// Adaptive / accessible: device tier (lib/quality), reduced-motion, or a phone
+// width → the ORIGINAL clean text grid instead. A visually-hidden list mirrors
+// every skill for screen readers + SEO; the canvas is aria-hidden decoration.
 // -----------------------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -40,6 +39,26 @@ type SkillGroup = { label: string; items: string[] };
 const BLUE = "#3b82f6";
 const TAU = Math.PI * 2;
 
+// --- deterministic tiny PRNG (so the "random" layout is stable per data) ------
+function hashStr(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+function makeRng(seed: number): () => number {
+  let s = seed >>> 0 || 1;
+  return () => {
+    s ^= s << 13;
+    s ^= s >>> 17;
+    s ^= s << 5;
+    s >>>= 0;
+    return s / 4294967296;
+  };
+}
+
 // -----------------------------------------------------------------------------
 // The canvas graph (only mounted on capable, wide-enough devices, motion on).
 // -----------------------------------------------------------------------------
@@ -47,20 +66,22 @@ type Node = {
   type: "core" | "hub" | "leaf";
   label: string;
   cat: number; // -1 for the core
-  rx: number; // raw layout x (pre-fit, origin-centered)
-  ry: number;
+  ax: number; // organic anchor (pre-relax)
+  ay: number;
   x: number;
   y: number;
   vx: number;
   vy: number;
-  hx: number; // fitted home x
+  hx: number; // relaxed home
   hy: number;
   ph: number; // drift phase
-  r: number; // base radius
+  r: number; // dot radius
+  lw: number; // measured label width (px)
+  lh: number; // label font size (px)
 };
 type Link = { a: Node; b: Node; pulse: number; speed: number };
 
-/** Shortest distance from point (px,py) to the segment a→b. */
+/** Shortest distance from point (px,py) to segment a→b. */
 function distToSeg(
   px: number,
   py: number,
@@ -107,14 +128,16 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
       "(hover: hover) and (pointer: fine)",
     ).matches;
 
+    const sizeOf = (t: Node["type"]) => (t === "core" ? 13 : t === "hub" ? 12 : 15);
+
     let W = 0;
     let H = 0;
     let raf = 0;
     let running = false;
     let revealed = false;
-    let reveal = 0; // 0→1 grow-in progress
+    let reveal = 0;
     let t = 0;
-    let now = 0; // accumulated ms (frame-derived; no Date.now)
+    let now = 0;
 
     const nodes: Node[] = [];
     const links: Link[] = [];
@@ -122,8 +145,8 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
       type: "core",
       label: "ARIF",
       cat: -1,
-      rx: 0,
-      ry: 0,
+      ax: 0,
+      ay: 0,
       x: 0,
       y: 0,
       vx: 0,
@@ -132,104 +155,171 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
       hy: 0,
       ph: 0,
       r: 6,
+      lw: 0,
+      lh: 13,
     };
     const mouse = { x: -1e4, y: -1e4, active: false };
+
+    const clamp = (v: number, lo: number, hi: number) =>
+      v < lo ? lo : v > hi ? hi : v;
+
+    // Label AABB (a node's dot + its label below it), with breathing-room gap.
+    const GAP = 9;
+    const boxHalfW = (nd: Node) => Math.max(nd.lw, nd.r * 2) / 2 + GAP;
+    const boxTop = (nd: Node) => nd.y - nd.r - GAP;
+    const boxBot = (nd: Node) => nd.y + nd.r + 7 + nd.lh + GAP;
+
+    // Push overlapping label boxes apart along their minimum-translation axis.
+    // `withSpring` also eases each node back toward its organic anchor so the
+    // graph keeps its shape; the final passes drop the spring so separation wins.
+    const relaxStep = (withSpring: boolean) => {
+      if (withSpring) {
+        for (const nd of nodes) {
+          if (nd.type === "core") continue;
+          nd.x += (nd.ax - nd.x) * 0.03;
+          nd.y += (nd.ay - nd.y) * 0.03;
+        }
+      }
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const A = nodes[i];
+          const B = nodes[j];
+          const ahw = boxHalfW(A);
+          const bhw = boxHalfW(B);
+          const ox = Math.min(A.x + ahw, B.x + bhw) - Math.max(A.x - ahw, B.x - bhw);
+          const oy = Math.min(boxBot(A), boxBot(B)) - Math.max(boxTop(A), boxTop(B));
+          if (ox > 0 && oy > 0) {
+            if (ox < oy) {
+              const push = ox / 2 + 0.5;
+              const dir = A.x <= B.x ? 1 : -1;
+              if (A.type !== "core") A.x -= dir * push;
+              if (B.type !== "core") B.x += dir * push;
+            } else {
+              const push = oy / 2 + 0.5;
+              const dir = A.y <= B.y ? 1 : -1;
+              if (A.type !== "core") A.y -= dir * push;
+              if (B.type !== "core") B.y += dir * push;
+            }
+          }
+        }
+      }
+      const m = 8;
+      for (const nd of nodes) {
+        if (nd.type === "core") continue;
+        const hw = boxHalfW(nd);
+        nd.x = clamp(nd.x, m + hw, W - m - hw);
+        nd.y = clamp(nd.y, m + nd.r + GAP, H - m - nd.r - 7 - nd.lh - GAP);
+      }
+    };
 
     const build = (grow: boolean) => {
       nodes.length = 0;
       links.length = 0;
+      const cx = W / 2;
+      const cy = H / 2;
+      core.ax = core.x = core.hx = cx;
+      core.ay = core.y = core.hy = cy;
       nodes.push(core);
 
-      // Raw layout in origin-centered units; the fit pass below scales it into the
-      // canvas, so these are just proportions (hub ring radius vs. leaf reach).
-      const RING = 200;
+      const N = skills.length;
+      const minWH = Math.min(W, H);
       skills.forEach((c, i) => {
-        const a = (i / skills.length) * TAU - Math.PI / 2;
-        const hrx = Math.cos(a) * RING;
-        const hry = Math.sin(a) * RING;
+        const rnd = makeRng(hashStr(c.label) ^ (i * 0x9e3779b1));
+        // uneven angular spacing + varied ring radius = organic, not a clean wheel
+        const a = (i / N) * TAU - Math.PI / 2 + (rnd() - 0.5) * (TAU / N) * 0.55;
+        const ex = W * 0.31 * (0.78 + rnd() * 0.5);
+        const ey = H * 0.31 * (0.78 + rnd() * 0.5);
+        const hx = cx + Math.cos(a) * ex;
+        const hy = cy + Math.sin(a) * ey;
         const hub: Node = {
           type: "hub",
           label: c.label,
           cat: i,
-          rx: hrx,
-          ry: hry,
+          ax: hx,
+          ay: hy,
           x: 0,
           y: 0,
           vx: 0,
           vy: 0,
           hx: 0,
           hy: 0,
-          ph: (i * 1.7) % TAU,
+          ph: rnd() * TAU,
           r: 5,
+          lw: 0,
+          lh: sizeOf("hub"),
         };
         nodes.push(hub);
-        links.push({ a: core, b: hub, pulse: (i * 0.37) % 1, speed: 0.16 });
+        links.push({ a: core, b: hub, pulse: rnd(), speed: 0.16 });
+
         const n = c.items.length;
-        const leafR = 96 + n * 14;
+        const outA = Math.atan2(hy - cy, hx - cx); // fan leaves outward from core
         c.items.forEach((s, j) => {
-          const la = a + (j - (n - 1) / 2) * (1.2 / Math.max(n, 2));
+          const rl = makeRng(hashStr(s) ^ (i * 0x27d4eb2f) ^ (j * 0x165667b1));
+          const la =
+            outA +
+            (j - (n - 1) / 2) * (1.0 / Math.max(n, 1)) +
+            (rl() - 0.5) * 0.6;
+          const ld = minWH * 0.14 * (0.72 + rl() * 0.7);
           const leaf: Node = {
             type: "leaf",
             label: s,
             cat: i,
-            rx: hrx + Math.cos(la) * leafR,
-            ry: hry + Math.sin(la) * leafR,
+            ax: hx + Math.cos(la) * ld,
+            ay: hy + Math.sin(la) * ld,
             x: 0,
             y: 0,
             vx: 0,
             vy: 0,
             hx: 0,
             hy: 0,
-            ph: (i * 3 + j) % TAU,
+            ph: rl() * TAU,
             r: 3,
+            lw: 0,
+            lh: sizeOf("leaf"),
           };
           nodes.push(leaf);
           links.push({
             a: hub,
             b: leaf,
-            pulse: ((i * 2 + j) * 0.19) % 1,
+            pulse: rl(),
             speed: 0.3 + (j % 3) * 0.08,
           });
         });
       });
 
-      // Auto-fit: scale + center the raw layout into the canvas, leaving margins
-      // for labels (wider on the sides where skill names sit, shorter top/bottom).
-      const padX = W < 820 ? 78 : 116;
-      const padTop = 40;
-      const padBottom = 54;
-      let minX = Infinity;
-      let maxX = -Infinity;
-      let minY = Infinity;
-      let maxY = -Infinity;
+      // measure labels, seed positions at anchors
       for (const nd of nodes) {
-        if (nd.rx < minX) minX = nd.rx;
-        if (nd.rx > maxX) maxX = nd.rx;
-        if (nd.ry < minY) minY = nd.ry;
-        if (nd.ry > maxY) maxY = nd.ry;
+        ctx.font = `700 ${nd.lh}px ${fontFamily}`;
+        const text = nd.type === "hub" ? nd.label.toUpperCase() : nd.label;
+        nd.lw = nd.type === "core" ? 0 : ctx.measureText(text).width;
+        nd.x = nd.ax;
+        nd.y = nd.ay;
       }
-      const availW = W - 2 * padX;
-      const availH = H - padTop - padBottom;
-      const s = Math.min(
-        availW / (maxX - minX || 1),
-        availH / (maxY - minY || 1),
-      );
-      const offX = padX + (availW - (maxX - minX) * s) / 2 - minX * s;
-      const offY = padTop + (availH - (maxY - minY) * s) / 2 - minY * s;
+
+      // relaxation: settle with spring, then separation-only so the FINAL state is
+      // guaranteed overlap-free (springs can't tug two labels back together).
+      for (let k = 0; k < 220; k++) relaxStep(true);
+      for (let k = 0; k < 80; k++) relaxStep(false);
+
       for (const nd of nodes) {
-        nd.hx = nd.rx * s + offX;
-        nd.hy = nd.ry * s + offY;
-      }
-      for (const nd of nodes) {
+        nd.hx = nd.x;
+        nd.hy = nd.y;
         if (grow && nd.type !== "core") {
           nd.x = core.hx;
           nd.y = core.hy;
-        } else {
-          nd.x = nd.hx;
-          nd.y = nd.hy;
         }
         nd.vx = 0;
         nd.vy = 0;
+      }
+
+      if (process.env.NODE_ENV !== "production") {
+        try {
+          (window as unknown as { __skillNodes?: unknown }).__skillNodes = nodes.map(
+            (n) => ({ label: n.label, type: n.type, hx: n.hx, hy: n.hy, lw: n.lw, lh: n.lh, r: n.r }),
+          );
+        } catch {
+          /* debug hook only */
+        }
       }
     };
 
@@ -237,7 +327,9 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
       const rect = wrap.getBoundingClientRect();
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       W = Math.max(1, rect.width);
-      H = W >= 1024 ? 600 : 540;
+      // canvas grows taller as branches are added, so there's always room
+      const total = 1 + skills.length + totalSkills;
+      H = clamp((W >= 1024 ? 680 : 560) + Math.max(0, total - 14) * 15, 560, 960);
       canvas.style.height = `${H}px`;
       canvas.width = Math.round(W * dpr);
       canvas.height = Math.round(H * dpr);
@@ -245,11 +337,7 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
       build(!revealed);
     };
 
-    const pad = 14;
-    const clamp = (v: number, lo: number, hi: number) =>
-      v < lo ? lo : v > hi ? hi : v;
-
-    const EDGE_HIT = 48; // px: cursor-to-link distance that lights a cluster
+    const EDGE_HIT = 48;
     let lastActive = -1;
 
     const draw = (dt: number) => {
@@ -257,15 +345,16 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
       now += dt * 1000;
       if (!revealed) reveal = 0;
       else if (reveal < 1) reveal = Math.min(1, reveal + dt * 1.1);
-      const ease = reveal * reveal * (3 - 2 * reveal); // smoothstep
+      const ease = reveal * reveal * (3 - 2 * reveal);
 
       ctx.clearRect(0, 0, W, H);
 
-      // physics: drift toward home + cursor repel, clamped to the canvas
+      // physics: gentle drift toward home + cursor repel (small amp so the
+      // no-overlap layout is preserved), clamped to the canvas
       for (const nd of nodes) {
         if (nd.type === "core") continue;
-        const tx = nd.hx + Math.cos(t * 0.5 + nd.ph) * 4 * ease;
-        const ty = nd.hy + Math.sin(t * 0.45 + nd.ph) * 4 * ease;
+        const tx = nd.hx + Math.cos(t * 0.5 + nd.ph) * 2 * ease;
+        const ty = nd.hy + Math.sin(t * 0.45 + nd.ph) * 2 * ease;
         nd.vx += (tx - nd.x) * 0.02;
         nd.vy += (ty - nd.y) * 0.02;
         if (mouse.active) {
@@ -282,8 +371,8 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
         }
         nd.vx *= 0.86;
         nd.vy *= 0.86;
-        nd.x = clamp(nd.x + nd.vx, pad, W - pad);
-        nd.y = clamp(nd.y + nd.vy, pad, H - pad);
+        nd.x += nd.vx;
+        nd.y += nd.vy;
       }
 
       // active cluster — from the LINK nearest the cursor, or auto-cycled on touch
@@ -303,10 +392,7 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
 
       // links + travelling pulses
       for (const l of links) {
-        const on =
-          activeCat != null &&
-          (l.b.cat === activeCat ||
-            (l.a.type === "core" && l.b.cat === activeCat));
+        const on = activeCat != null && l.b.cat === activeCat;
         ctx.strokeStyle = on
           ? "rgba(59,130,246,0.6)"
           : `rgba(96,110,140,${0.16 * reveal})`;
@@ -327,7 +413,7 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
         }
       }
 
-      // core pulse ring (echoes the career "present" node)
+      // core pulse ring
       const pulseR = core.r + 6 + Math.sin(t * 1.6) * 3;
       ctx.strokeStyle = `rgba(59,130,246,${0.25 + 0.15 * Math.sin(t * 1.6)})`;
       ctx.lineWidth = 1;
@@ -343,32 +429,25 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
         let col: string;
         let lab: string;
         let labCol: string;
-        let size: number;
         if (nd.type === "core") {
           col = "#f4f4f5";
           lab = nd.label;
           labCol = "#d4d4d8";
-          size = 13;
         } else if (nd.type === "hub") {
           col = BLUE;
           lab = nd.label.toUpperCase();
           labCol = isActive ? "#dbeafe" : "#a1a1aa";
-          size = 12;
         } else {
           col = isActive ? "#ffffff" : "#d4d4d8";
           lab = nd.label;
           labCol = isActive ? "#ffffff" : "#a1a1aa";
-          size = 15;
         }
 
-        // highlight halo on the active cluster
         if (isActive) {
           ctx.beginPath();
           ctx.arc(nd.x, nd.y, nd.r + 7, 0, TAU);
           ctx.fillStyle =
-            nd.type === "leaf"
-              ? "rgba(255,255,255,0.10)"
-              : "rgba(59,130,246,0.16)";
+            nd.type === "leaf" ? "rgba(255,255,255,0.10)" : "rgba(59,130,246,0.16)";
           ctx.fill();
         }
 
@@ -385,9 +464,7 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
           ctx.stroke();
         }
 
-        // labels — the site's font, bold, offset BELOW the dot (incl. the core,
-        // so "ARIF" no longer overlaps its own node).
-        ctx.font = `700 ${size}px ${fontFamily}`;
+        ctx.font = `700 ${nd.lh}px ${fontFamily}`;
         ctx.fillStyle = labCol;
         ctx.fillText(lab, nd.x, nd.y + nd.r + 7);
         ctx.globalAlpha = 1;
@@ -432,8 +509,6 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
       canvas.addEventListener("pointerleave", onLeave);
     }
 
-    // Off-screen → stop the loop entirely (no idle CPU). First entry starts the
-    // grow-in reveal.
     const io = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -458,11 +533,10 @@ function SkillGraphCanvas({ skills }: { skills: SkillGroup[] }) {
       canvas.removeEventListener("pointermove", onMove);
       canvas.removeEventListener("pointerleave", onLeave);
     };
-  }, [skills]);
+  }, [skills, totalSkills]);
 
   return (
     <div ref={wrapRef} aria-hidden className="relative">
-      {/* corner HUD readouts — the site's mono/blue chrome, no containing box */}
       <div className="pointer-events-none absolute left-0 top-0 z-10 font-mono text-[10px] uppercase tracking-[0.15em] text-zinc-600">
         move cursor near a link to trace
       </div>
@@ -514,18 +588,12 @@ export function SkillsConstellation({
   skills: SkillGroup[];
   eyebrow: string;
 }) {
-  // Resolve the tier on the client (needs navigator + a WebGL probe). Until then,
-  // and on the low tier / reduced motion, render the plain grid — that keeps SSR
-  // and first paint identical to the fallback (no hydration mismatch) and gives
-  // weak hardware the calm version.
   const [tier, setTier] = useState<QualityTier | null>(null);
   const reduce = useMemo(() => prefersReducedMotion(), []);
   useEffect(() => setTier(detectQualityTier()), []);
 
-  // The graph needs canvas room — 20 labeled nodes crammed into a phone width read
-  // as clutter. So it's a ≥640px treat; narrower screens keep the clean text grid
-  // (same responsive-degradation the pinned 3D / Career serpentine use). Tracked in
-  // state + on resize so a rotate/resize across the breakpoint swaps cleanly.
+  // The graph needs canvas room — many labeled nodes on a phone width read as
+  // clutter — so it's a ≥640px treat; narrower screens keep the clean text grid.
   const [wide, setWide] = useState(false);
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 640px)");
@@ -550,7 +618,6 @@ export function SkillsConstellation({
 
         {useGraph ? (
           <>
-            {/* Screen-reader / SEO mirror of the graph's content. */}
             <ul className="sr-only">
               {skills.map((c) => (
                 <li key={c.label}>
