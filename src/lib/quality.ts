@@ -72,12 +72,19 @@ function readRendererString(): string {
   }
 }
 
+// Memoize the client result: the probe (a throwaway WebGL context + navigator
+// reads) is identical for the whole session, and the page has several callers
+// (every HeroHead + the root tier marker). Computed once, reused thereafter.
+let cachedTier: QualityTier | null = null;
+
 /**
  * Pick a quality tier from device signals. Conservative: defaults to "high" and
  * only demotes on a CLEAR weak signal, so real machines are never needlessly
- * downgraded. SSR-safe (returns "high" with no `navigator`).
+ * downgraded. SSR-safe (returns "high" with no `navigator`, and does NOT cache so
+ * the client still computes the real tier after hydration).
  */
 export function detectQualityTier(): QualityTier {
+  if (cachedTier) return cachedTier;
   if (typeof navigator === "undefined") return "high";
 
   const cores = navigator.hardwareConcurrency ?? 8;
@@ -85,20 +92,20 @@ export function detectQualityTier(): QualityTier {
   const mem = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
   const gpu = readRendererString();
 
-  // Software rasterizer (no real GPU) — always the weakest tier.
-  if (/swiftshader|llvmpipe|software|basic render|microsoft basic/.test(gpu)) {
-    return "low";
-  }
-  // Very constrained hardware.
-  if (cores <= 2) return "low";
-  if (mem !== undefined && mem <= 2) return "low";
-
   // Older low-end integrated Intel parts (pre-Iris HD/UHD, GMA) — mid, not low.
   const weakIntel = /intel/.test(gpu) && /(gma|hd graphics (2|3|4|5)0{2}|uhd graphics 6)/.test(gpu);
 
-  if (cores <= 4) return "mid";
-  if (mem !== undefined && mem <= 4) return "mid";
-  if (weakIntel) return "mid";
+  let result: QualityTier;
+  if (/swiftshader|llvmpipe|software|basic render|microsoft basic/.test(gpu)) {
+    result = "low"; // software rasterizer (no real GPU) — always the weakest tier
+  } else if (cores <= 2 || (mem !== undefined && mem <= 2)) {
+    result = "low"; // very constrained hardware
+  } else if (cores <= 4 || (mem !== undefined && mem <= 4) || weakIntel) {
+    result = "mid";
+  } else {
+    result = "high";
+  }
 
-  return "high";
+  cachedTier = result;
+  return result;
 }

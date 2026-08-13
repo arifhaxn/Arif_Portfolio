@@ -1,5 +1,6 @@
 import { SmoothScrollProvider } from "@/components/providers/SmoothScrollProvider";
 import { HeadScanProvider } from "@/components/providers/HeadScanProvider";
+import { QualityTierMarker } from "@/components/providers/QualityTierMarker";
 import { Navbar } from "@/components/Navbar";
 import { PixelReveal } from "@/components/PixelReveal";
 import { CursorDot } from "@/components/CursorDot";
@@ -21,6 +22,9 @@ export default async function SiteLayout({
   const nav = await getNavbar();
   return (
     <>
+      {/* Stamp data-quality-tier on <html> so CSS ambient animations can scale
+          down on weak devices (same tier the 3D HeroHead uses). */}
+      <QualityTierMarker />
       <HeadScanProvider>
         <SmoothScrollProvider>
           <Navbar nav={nav} />

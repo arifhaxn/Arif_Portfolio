@@ -204,3 +204,21 @@ html.cursor-none * {
     display: none;
   }
 }
+
+/* Low render-quality tier (weak/old GPU — see lib/quality + QualityTierMarker).
+   The project cards carry ~16 continuously-animating stroke-dashoffset traces
+   EACH (not GPU-accelerated), plus per-card float/glow loops — a real cost on
+   struggling hardware. On the `low` tier only, suppress those ambient loops the
+   same way reduced-motion does: the circuit BOARD and pads still render (static),
+   the cards still sit and glow — only the continuous repainting stops. Mid/high
+   are untouched and animate exactly as before. */
+:root[data-quality-tier="low"] .thumb-float,
+:root[data-quality-tier="low"] .thumb-glow,
+:root[data-quality-tier="low"] .circuit-node,
+:root[data-quality-tier="low"] .scroll-cue-line {
+  animation: none;
+}
+:root[data-quality-tier="low"] .circuit-flow {
+  animation: none;
+  display: none;
+}
