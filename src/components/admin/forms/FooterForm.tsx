@@ -27,7 +27,7 @@ export function FooterForm({ initial }: { initial: FooterContent }) {
         }}
         className="flex flex-col gap-5"
       >
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Eyebrow">
             <TextInput value={doc.eyebrow} onChange={(v) => setDoc((d) => ({ ...d, eyebrow: v }))} />
           </Field>
@@ -42,7 +42,7 @@ export function FooterForm({ initial }: { initial: FooterContent }) {
             onChange={(v) => setDoc((d) => ({ ...d, email: v }))}
           />
         </Field>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Copy-email label">
             <TextInput
               value={doc.copyLabel}
@@ -81,7 +81,7 @@ export function FooterForm({ initial }: { initial: FooterContent }) {
             addLabel="social link"
             render={(s, update) => (
               <div className="flex flex-col gap-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <TextInput value={s.label} placeholder="Label" onChange={(v) => update({ label: v })} />
                   <TextInput value={s.href} placeholder="https://…" onChange={(v) => update({ href: v })} />
                 </div>

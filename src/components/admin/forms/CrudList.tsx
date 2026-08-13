@@ -115,7 +115,7 @@ export function CrudList<T>({
       {items.map((it, i) => (
         <div
           key={i}
-          className="flex items-center justify-between gap-3 rounded-md border border-neutral-800 bg-neutral-900/40 px-3 py-2"
+          className="flex flex-col gap-2 rounded-md border border-neutral-800 bg-neutral-900/40 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
         >
           <div className="min-w-0 flex-1">{renderRow(it)}</div>
           <div className="flex shrink-0 items-center gap-1">

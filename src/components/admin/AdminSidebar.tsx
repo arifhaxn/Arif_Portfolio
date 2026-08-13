@@ -15,30 +15,34 @@ export function AdminSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-neutral-800 bg-neutral-900 p-4">
-      <div className="mb-6 px-2 text-sm font-semibold tracking-tight text-neutral-200">
-        Arif — Admin
+    // Mobile: a full-width bar that scrolls its section chips horizontally, sitting
+    // above the content. lg+: the original fixed vertical sidebar.
+    <aside className="shrink-0 border-b border-neutral-800 bg-neutral-900 lg:w-56 lg:border-b-0 lg:border-r">
+      <div className="flex items-center gap-3 p-3 lg:flex-col lg:items-stretch lg:gap-0 lg:p-4">
+        <div className="shrink-0 px-1 text-sm font-semibold tracking-tight text-neutral-200 lg:mb-6 lg:px-2">
+          Arif — Admin
+        </div>
+        <nav className="flex flex-1 gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
+          {ADMIN_SECTIONS.map((s) => {
+            const href = `/admin/${s.slug}`;
+            const active = pathname === href;
+            return (
+              <Link
+                key={s.slug}
+                href={href}
+                aria-current={active ? "page" : undefined}
+                className={`shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm transition-colors lg:shrink ${
+                  active
+                    ? "bg-neutral-800 text-white"
+                    : "text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200"
+                }`}
+              >
+                {s.label}
+              </Link>
+            );
+          })}
+        </nav>
       </div>
-      <nav className="flex flex-col gap-1">
-        {ADMIN_SECTIONS.map((s) => {
-          const href = `/admin/${s.slug}`;
-          const active = pathname === href;
-          return (
-            <Link
-              key={s.slug}
-              href={href}
-              aria-current={active ? "page" : undefined}
-              className={`rounded-md px-3 py-2 text-sm transition-colors ${
-                active
-                  ? "bg-neutral-800 text-white"
-                  : "text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200"
-              }`}
-            >
-              {s.label}
-            </Link>
-          );
-        })}
-      </nav>
     </aside>
   );
 }

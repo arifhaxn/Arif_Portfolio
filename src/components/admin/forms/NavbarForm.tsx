@@ -36,7 +36,7 @@ export function NavbarForm({ initial }: { initial: NavbarContent }) {
               storagePath="navbar"
               onChange={(v) => setDoc((d) => ({ ...d, wordmark: { ...d.wordmark, logo: v } }))}
             />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Alt text">
                 <TextInput
                   value={doc.wordmark.alt}
@@ -62,7 +62,7 @@ export function NavbarForm({ initial }: { initial: NavbarContent }) {
             makeEmpty={() => ({ label: "", href: "", side: "left" })}
             addLabel="link"
             render={(link, update) => (
-              <div className="grid grid-cols-[1fr_1fr_8rem] gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_8rem]">
                 <TextInput value={link.label} placeholder="Label" onChange={(v) => update({ label: v })} />
                 <TextInput value={link.href} placeholder="/href" onChange={(v) => update({ href: v })} />
                 <Select

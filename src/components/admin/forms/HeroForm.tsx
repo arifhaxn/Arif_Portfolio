@@ -32,7 +32,7 @@ export function HeroForm({ initial }: { initial: HeroContent }) {
         <Field label="Name" hint="rendered one word per line">
           <TextInput value={doc.name} onChange={(v) => setDoc((d) => ({ ...d, name: v }))} />
         </Field>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Tagline line 1">
             <TextInput
               value={doc.tagline.primary}
@@ -67,7 +67,7 @@ export function HeroForm({ initial }: { initial: HeroContent }) {
                 onChange={(v) => setDoc((d) => ({ ...d, hud: { ...d.hud, statusWords: v } }))}
               />
             </Field>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Field label="Coding-since year">
                 <TextInput
                   value={doc.hud.codingSinceYear}

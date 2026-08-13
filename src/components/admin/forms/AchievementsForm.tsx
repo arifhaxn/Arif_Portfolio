@@ -62,7 +62,7 @@ export function AchievementsForm({ initial }: { initial: AchievementsContent }) 
           </div>
         </div>
         <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field label="Eyebrow">
               <TextInput value={doc.eyebrow} onChange={(v) => setDoc((d) => ({ ...d, eyebrow: v }))} />
             </Field>
@@ -106,7 +106,7 @@ export function AchievementsForm({ initial }: { initial: AchievementsContent }) 
         )}
         renderForm={(draft, setDraft) => (
           <>
-            <div className="grid grid-cols-[6rem_1fr] gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-[6rem_1fr]">
               <Field label="Id" hint="unique">
                 <TextInput value={draft.id} onChange={(v) => setDraft((d) => ({ ...d, id: v }))} />
               </Field>
@@ -114,7 +114,7 @@ export function AchievementsForm({ initial }: { initial: AchievementsContent }) 
                 <TextInput value={draft.title} onChange={(v) => setDraft((d) => ({ ...d, title: v }))} />
               </Field>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Issuer">
                 <TextInput value={draft.issuer} onChange={(v) => setDraft((d) => ({ ...d, issuer: v }))} />
               </Field>

@@ -24,10 +24,11 @@ export default async function AdminDashboardLayout({
   if (!admin) redirect("/admin/login");
 
   return (
-    <div className="flex min-h-screen bg-neutral-950 text-neutral-100">
+    // Stack the nav above the content on phones; side-by-side from lg up.
+    <div className="flex min-h-screen flex-col bg-neutral-950 text-neutral-100 lg:flex-row">
       <AdminSidebar />
-      <div className="flex min-h-screen flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-neutral-800 px-6 py-3">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center justify-between border-b border-neutral-800 px-4 py-3 sm:px-6">
           <span className="text-sm text-neutral-500">Content admin</span>
           <form action={logout}>
             <button
@@ -38,7 +39,7 @@ export default async function AdminDashboardLayout({
             </button>
           </form>
         </header>
-        <main className="flex-1 p-8">{children}</main>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
     </div>
   );

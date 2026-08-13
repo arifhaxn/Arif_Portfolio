@@ -71,7 +71,7 @@ export function CareerForm({ initial }: { initial: CareerContent }) {
         )}
         renderForm={(draft, setDraft) => (
           <>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Company">
                 <TextInput value={draft.company} onChange={(v) => setDraft((d) => ({ ...d, company: v }))} />
               </Field>
@@ -86,7 +86,7 @@ export function CareerForm({ initial }: { initial: CareerContent }) {
                 onChange={(v) => setDraft((d) => ({ ...d, description: v }))}
               />
             </Field>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Period" hint="e.g. 2023 — Present">
                 <TextInput value={draft.period} onChange={(v) => setDraft((d) => ({ ...d, period: v }))} />
               </Field>

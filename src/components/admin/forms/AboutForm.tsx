@@ -105,7 +105,7 @@ export function AboutForm({ initial }: { initial: AboutContent }) {
 
         <div className="rounded-md border border-neutral-800 p-4">
           <div className="mb-3 text-sm font-medium text-neutral-300">Hero status HUD</div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Location">
               <TextInput
                 value={doc.heroStatus.location}
