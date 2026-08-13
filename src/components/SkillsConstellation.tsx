@@ -174,7 +174,9 @@ function SkillGraphCanvas({ skills, logo }: { skills: SkillGroup[]; logo: string
       v < lo ? lo : v > hi ? hi : v;
 
     // Label AABB (a node's dot + its label below it), with breathing-room gap.
-    const GAP = 9;
+    // Larger gap = more space between every label (the relaxation still guarantees
+    // no overlap at any count; this just makes the resting spacing roomier).
+    const GAP = 14;
     const boxHalfW = (nd: Node) => Math.max(nd.lw, nd.r * 2) / 2 + GAP;
     const boxTop = (nd: Node) => nd.y - nd.r - GAP;
     const boxBot = (nd: Node) => nd.y + nd.r + 7 + nd.lh + GAP;
@@ -270,9 +272,9 @@ function SkillGraphCanvas({ skills, logo }: { skills: SkillGroup[]; logo: string
           const rl = makeRng(hashStr(s) ^ (i * 0x27d4eb2f) ^ (j * 0x165667b1));
           const la =
             outA +
-            (j - (n - 1) / 2) * (0.95 / Math.max(n, 1)) +
-            (rl() - 0.5) * 0.5;
-          const ld = minWH * 0.135 * (0.82 + rl() * 0.45);
+            (j - (n - 1) / 2) * (1.3 / Math.max(n, 1)) +
+            (rl() - 0.5) * 0.6;
+          const ld = minWH * 0.15 * (0.82 + rl() * 0.45);
           const leaf: Node = {
             type: "leaf",
             label: s,
