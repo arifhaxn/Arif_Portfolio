@@ -29,6 +29,7 @@ import {
 } from "@/lib/animations";
 import { ScrambleText } from "@/components/ScrambleText";
 import { Career } from "@/components/Career";
+import { SkillsConstellation } from "@/components/SkillsConstellation";
 import { HalftonePortrait } from "@/components/HalftonePortrait";
 import { HeroStatus } from "@/components/HeroStatus";
 import { CodingSince } from "@/components/Hud";
@@ -324,35 +325,9 @@ export function AboutView({
       <Career entries={career.items} eyebrow={career.eyebrow} />
 
       {/* ============================ 3 · SKILLS ========================== */}
-      <section className="relative border-t border-white/5 px-6 py-24 sm:px-10">
-        <div className="mx-auto max-w-6xl">
-          <ScrambleText
-            as="p"
-            entrance="observer"
-            className="mb-16 font-mono text-xs uppercase tracking-[0.3em] text-blue-400"
-          >
-            {about.skillsEyebrow}
-          </ScrambleText>
-          <div className="grid gap-x-12 gap-y-16 sm:grid-cols-2">
-            {about.skills.map((cat, i) => (
-              <div key={cat.label} data-skill className="flex flex-col gap-3">
-                {/* Small eyebrow — index + category name (the former big title). */}
-                <h3 className="font-mono text-xs uppercase tracking-[0.2em] text-zinc-500">
-                  {String(i + 1).padStart(2, "0")} — {cat.label}
-                </h3>
-                {/* Skills are now the prominent text. */}
-                <ScrambleText
-                  as="p"
-                  entrance="observer"
-                  className="text-3xl font-semibold tracking-tight sm:text-4xl"
-                >
-                  {cat.items.join(" · ")}
-                </ScrambleText>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* Neural / circuit graph of the stack (capable devices); falls back to the
+          original clean text grid on low-tier / reduced motion. See the component. */}
+      <SkillsConstellation skills={about.skills} eyebrow={about.skillsEyebrow} />
 
       {/* =========================== 4 · CONTACT ========================== */}
       {/* Full-viewport: always fills the screen regardless of content length. */}
