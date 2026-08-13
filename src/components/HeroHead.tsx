@@ -64,6 +64,12 @@ import {
 import { ARM_BREATHE, HEAD_SCAN } from "@/lib/motion";
 import { onReveal } from "@/lib/introControl";
 import { useHeadScan } from "@/components/providers/HeadScanProvider";
+import {
+  detectQualityTier,
+  FPS_FLOOR,
+  QUALITY,
+  type QualityTier,
+} from "@/lib/quality";
 
 // -----------------------------------------------------------------------------
 // ▶ ROBOT ARM-BREATHE (Path B) — shoulder-pivot vertex sway for the fused mesh.
@@ -287,16 +293,20 @@ const PARTICLE_ROWS = 18;
 const PARTICLE_W = 15; // world-unit spread — overfills even a full-viewport wide canvas
 const PARTICLE_H = 9;
 
-/** Grid of background points with per-point seed + parallax-depth attributes. */
-function buildParticleGeometry(): BufferGeometry {
+/** Grid of background points with per-point seed + parallax-depth attributes.
+ *  `scale` (0..1) thins the grid on weaker devices — same spread, fewer points —
+ *  so the field stays present but cheaper. 1 = the full established count. */
+function buildParticleGeometry(scale = 1): BufferGeometry {
+  const cols = Math.max(2, Math.round(PARTICLE_COLS * scale));
+  const rows = Math.max(2, Math.round(PARTICLE_ROWS * scale));
   const pos: number[] = [];
   const seed: number[] = [];
   const depth: number[] = [];
-  for (let r = 0; r < PARTICLE_ROWS; r++) {
-    for (let c = 0; c < PARTICLE_COLS; c++) {
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
       pos.push(
-        (c / (PARTICLE_COLS - 1) - 0.5) * PARTICLE_W + (Math.random() - 0.5) * 0.18,
-        (r / (PARTICLE_ROWS - 1) - 0.5) * PARTICLE_H + (Math.random() - 0.5) * 0.14,
+        (c / (cols - 1) - 0.5) * PARTICLE_W + (Math.random() - 0.5) * 0.18,
+        (r / (rows - 1) - 0.5) * PARTICLE_H + (Math.random() - 0.5) * 0.14,
         -2.2 - Math.random() * 1.6, // depth behind the model (~z 0)
       );
       seed.push(Math.random());
@@ -465,15 +475,21 @@ function ParticleField({
   styleMix,
   scan,
   reduce,
+  particleScale = 1,
 }: {
   styleMix: React.RefObject<{ v: number }>;
   /** Scan reveal (1 = shown, → 0 on exit) so the field fades out with the model. */
   scan: React.RefObject<{ v: number }>;
   reduce: boolean;
+  /** Device-tier grid thinning (1 = full count). */
+  particleScale?: number;
 }) {
   const matRef = useRef<ShaderMaterial>(null);
   const pointsRef = useRef<Points>(null);
-  const geometry = useMemo(() => buildParticleGeometry(), []);
+  const geometry = useMemo(
+    () => buildParticleGeometry(particleScale),
+    [particleScale],
+  );
   useEffect(() => () => geometry.dispose(), [geometry]);
 
   const uniforms = useMemo(
@@ -559,6 +575,7 @@ function ShapeMeshes({
   bindExit,
   draggable = false,
   drag,
+  particleScale = 1,
 }: {
   /** Style A geometry — line set (robot) or wireframe mesh (icosahedron). */
   geometry: BufferGeometry;
@@ -588,6 +605,8 @@ function ShapeMeshes({
   /** Accumulated drag rotation (radians), added to the group each frame. Owned by
    *  HeroHead so it persists across re-renders; mutated by the drag handlers. */
   drag?: React.RefObject<{ x: number; y: number }>;
+  /** Device-tier particle-grid thinning (1 = full count), forwarded to the field. */
+  particleScale?: number;
 }) {
   const group = useRef<Group>(null);
   // Style A material refs — a scan-aware ShaderMaterial for both shapes now (the
@@ -835,8 +854,14 @@ function ShapeMeshes({
   return (
     <>
       {/* Background particle field (behind the head), faded with the style mix
-          and the scan reveal (so it exits with the model). */}
-      <ParticleField styleMix={styleMix} scan={scan} reduce={reduce} />
+          and the scan reveal (so it exits with the model). Grid density scales
+          with the device tier. */}
+      <ParticleField
+        styleMix={styleMix}
+        scan={scan}
+        reduce={reduce}
+        particleScale={particleScale}
+      />
 
       <group ref={group}>
       <Center scale={scale * zoom}>
@@ -937,12 +962,14 @@ function PolyShape({
   zoom = 1,
   scanEnabled = false,
   bindExit,
+  particleScale = 1,
 }: {
   tilt: React.RefObject<{ x: number; y: number }>;
   spin?: number;
   zoom?: number;
   scanEnabled?: boolean;
   bindExit?: (fn: (() => Promise<void>) | null) => void;
+  particleScale?: number;
 }) {
   const geometry = useMemo(() => new IcosahedronGeometry(FIT_RADIUS, 0), []);
   // Solid, flat-normal copy for the halftone (Style B).
@@ -967,6 +994,7 @@ function PolyShape({
       zoom={zoom}
       scanEnabled={scanEnabled}
       bindExit={bindExit}
+      particleScale={particleScale}
     />
   );
 }
@@ -987,6 +1015,7 @@ function RobotShape({
   bindExit,
   draggable = false,
   drag,
+  particleScale = 1,
 }: {
   tilt: React.RefObject<{ x: number; y: number }>;
   spin?: number;
@@ -996,6 +1025,7 @@ function RobotShape({
   bindExit?: (fn: (() => Promise<void>) | null) => void;
   draggable?: boolean;
   drag?: React.RefObject<{ x: number; y: number }>;
+  particleScale?: number;
 }) {
   const { scene } = useGLTF("/robot.glb");
 
@@ -1057,8 +1087,56 @@ function RobotShape({
       bindExit={bindExit}
       draggable={draggable}
       drag={drag}
+      particleScale={particleScale}
     />
   );
+}
+
+// -----------------------------------------------------------------------------
+// AdaptiveDpr — runtime FPS safety net (inside the Canvas).
+// The static tier probe (lib/quality) handles the common weak-hardware case up
+// front, but a device can be MIS-detected as capable and still stutter. This
+// watches the real frame rate and, after a short warm-up (skipping the one-time
+// GLTF parse + EdgesGeometry build), steps the pixel ratio DOWN one notch per
+// sustained bad second — never up — so a capable machine that never drops frames
+// stays pinned at its full `maxDpr` and looks identical, while a struggling one
+// recovers smoothness. Lowering the pixel ratio is the single biggest fillrate
+// lever and, unlike MSAA/particle count, needs no context rebuild or remount.
+// -----------------------------------------------------------------------------
+function AdaptiveDpr({ maxDpr, minDpr }: { maxDpr: number; minDpr: number }) {
+  const setDpr = useThree((s) => s.setDpr);
+  const state = useRef({ dpr: maxDpr, warmup: 1.5, elapsed: 0, frames: 0, bad: 0 });
+
+  useFrame((_, delta) => {
+    const s = state.current;
+    // Ignore the first ~1.5s so load-time hitches don't demote a fine machine.
+    if (s.warmup > 0) {
+      s.warmup -= delta;
+      return;
+    }
+    s.elapsed += delta;
+    s.frames += 1;
+    if (s.elapsed < 1) return; // evaluate once per ~second
+
+    const fps = s.frames / s.elapsed;
+    s.elapsed = 0;
+    s.frames = 0;
+
+    if (fps < FPS_FLOOR) {
+      // Require two consecutive bad seconds before stepping down (rides out a
+      // transient spike), then drop the pixel ratio by 0.5 toward the floor.
+      s.bad += 1;
+      if (s.bad >= 2 && s.dpr > minDpr) {
+        s.dpr = Math.max(minDpr, s.dpr - 0.5);
+        setDpr(s.dpr);
+        s.bad = 0;
+      }
+    } else {
+      s.bad = 0;
+    }
+  });
+
+  return null;
 }
 
 export function HeroHead({
@@ -1085,6 +1163,20 @@ export function HeroHead({
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
   const [inView, setInView] = useState(true);
+
+  // Render-quality tier. Resolved on the client after mount (needs `navigator` +
+  // a WebGL probe), so it starts null on SSR/first paint and the Canvas mounts a
+  // tick later once the tier — and therefore the correct MSAA / pixel-ratio /
+  // particle-count / glow settings — is known. That one frame is invisible (the
+  // intro cover is still clearing), and it lets antialias reflect the tier, which
+  // can only be chosen at Canvas creation. `null` behaves as "high" for the glow
+  // so the wrapper's SSR and first-client className match (no hydration mismatch).
+  const [tier, setTier] = useState<QualityTier | null>(null);
+  useEffect(() => {
+    setTier(detectQualityTier());
+  }, []);
+  const q = QUALITY[tier ?? "high"];
+  const glow = shape === "robot" && (tier === null || q.glow);
 
   // The robot always scans; the icosahedron scans when the `scan` prop is set
   // (the Projects section). Drives the intro sweep, the exit registration below,
@@ -1146,38 +1238,50 @@ export function HeroHead({
       // pointer-events-none) so R3F can raycast the figure; the grab/grabbing
       // cursor is set by the drag handlers only while over the robot.
       className={`h-full w-full ${draggable ? "pointer-events-auto" : ""} ${
-        shape === "robot" ? ROBOT_GLOW_CLASS : ""
+        glow ? ROBOT_GLOW_CLASS : ""
       }`}
     >
-      <Canvas
-        frameloop={inView ? "always" : "never"}
-        dpr={[1, 2]} // cap pixel ratio at 2 (≈ Math.min(devicePixelRatio, 2))
-        camera={{ position: [0, 0, 2.9], fov: 45 }}
-        gl={{ antialias: true, alpha: true }}
-      >
-        <Suspense fallback={null}>
-          {shape === "robot" ? (
-            <RobotShape
-              tilt={tilt}
-              spin={spin}
-              zoom={zoom}
-              scanEnabled={scanEnabled}
-              scanOnReveal={scanOnReveal}
-              bindExit={bindExit}
-              draggable={draggable}
-              drag={drag}
-            />
-          ) : (
-            <PolyShape
-              tilt={tilt}
-              spin={spin}
-              zoom={zoom}
-              scanEnabled={scanEnabled}
-              bindExit={bindExit}
-            />
-          )}
-        </Suspense>
-      </Canvas>
+      {/* Mount the Canvas only once the device tier is resolved, so MSAA (fixed at
+          creation) and the initial pixel ratio match the tier. */}
+      {tier !== null && (
+        <Canvas
+          frameloop={inView ? "always" : "never"}
+          dpr={[q.minDpr, q.maxDpr]} // tier-scaled pixel-ratio range
+          camera={{ position: [0, 0, 2.9], fov: 45 }}
+          // powerPreference nudges the browser to pick the discrete GPU where one
+          // exists (no-op on integrated-only machines) — a free win, no visual change.
+          gl={{ antialias: q.antialias, alpha: true, powerPreference: "high-performance" }}
+        >
+          {/* Runtime FPS guard: steps the pixel ratio down if a mis-detected
+              device still stutters. Never raises it, so capable machines are
+              untouched. */}
+          <AdaptiveDpr maxDpr={q.maxDpr} minDpr={q.minDpr} />
+          <Suspense fallback={null}>
+            {shape === "robot" ? (
+              <RobotShape
+                tilt={tilt}
+                spin={spin}
+                zoom={zoom}
+                scanEnabled={scanEnabled}
+                scanOnReveal={scanOnReveal}
+                bindExit={bindExit}
+                draggable={draggable}
+                drag={drag}
+                particleScale={q.particleScale}
+              />
+            ) : (
+              <PolyShape
+                tilt={tilt}
+                spin={spin}
+                zoom={zoom}
+                scanEnabled={scanEnabled}
+                bindExit={bindExit}
+                particleScale={q.particleScale}
+              />
+            )}
+          </Suspense>
+        </Canvas>
+      )}
     </div>
   );
 }
