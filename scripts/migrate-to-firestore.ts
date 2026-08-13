@@ -76,7 +76,7 @@ function initAdmin() {
 const navbar: NavbarContent = {
   wordmark: { logo: "/arif-logo.png", alt: "Arif Hasan", homeAriaLabel: "Home" },
   links: [
-    { label: "Contact", href: "/about#contact", side: "left" },
+    { label: "Career", href: "/about#career", side: "left" },
     { label: "About", href: "/about", side: "left" },
     { label: "Projects", href: "/projects", side: "right" },
     { label: "Achievements", href: "/achievements", side: "right" },
