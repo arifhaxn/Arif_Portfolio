@@ -176,7 +176,7 @@ function SkillGraphCanvas({ skills, logo }: { skills: SkillGroup[]; logo: string
     // Label AABB (a node's dot + its label below it), with breathing-room gap.
     // Larger gap = more space between every label (the relaxation still guarantees
     // no overlap at any count; this just makes the resting spacing roomier).
-    const GAP = 14;
+    const GAP = 16;
     const boxHalfW = (nd: Node) => Math.max(nd.lw, nd.r * 2) / 2 + GAP;
     const boxTop = (nd: Node) => nd.y - nd.r - GAP;
     const boxBot = (nd: Node) => nd.y + nd.r + 7 + nd.lh + GAP;
@@ -184,7 +184,7 @@ function SkillGraphCanvas({ skills, logo }: { skills: SkillGroup[]; logo: string
     // Push overlapping label boxes apart along their minimum-translation axis.
     // `withSpring` also eases each node back toward its organic anchor so the
     // graph keeps its shape; the final passes drop the spring so separation wins.
-    const relaxStep = (withSpring: boolean) => {
+    const relaxStep = (withSpring: boolean, withEdge = true) => {
       if (withSpring) {
         for (const nd of nodes) {
           if (nd.type === "core") continue;
@@ -215,6 +215,51 @@ function SkillGraphCanvas({ skills, logo }: { skills: SkillGroup[]; logo: string
           }
         }
       }
+
+      // Edge clearance: keep each label off of every branch line it isn't part of
+      // (label-vs-label separation alone lets a line pass straight through a
+      // label — the "too close to the branch" problem). Push the node away from
+      // the nearest point of any foreign link its label crowds.
+      const CLEAR = 15;
+      if (withEdge) for (const nd of nodes) {
+        if (nd.type === "core") continue;
+        const hw = Math.max(nd.lw, nd.r * 2) / 2;
+        const bl = nd.x - hw;
+        const br = nd.x + hw;
+        const bt = nd.y - nd.r - 4; // dot + label band
+        const bb = nd.y + nd.r + 7 + nd.lh;
+        const bcx = nd.x;
+        const bcy = (bt + bb) / 2;
+        for (const l of links) {
+          if (l.a === nd || l.b === nd) continue; // its own branch is fine
+          const ax = l.a.x;
+          const ay = l.a.y;
+          const dxs = l.b.x - ax;
+          const dys = l.b.y - ay;
+          const len2 = dxs * dxs + dys * dys || 1;
+          let t = ((bcx - ax) * dxs + (bcy - ay) * dys) / len2;
+          t = t < 0 ? 0 : t > 1 ? 1 : t;
+          const cx2 = ax + t * dxs;
+          const cy2 = ay + t * dys;
+          // closest point ON the label box to that segment point
+          const nx = cx2 < bl ? bl : cx2 > br ? br : cx2;
+          const ny = cy2 < bt ? bt : cy2 > bb ? bb : cy2;
+          let dx = nx - cx2;
+          let dy = ny - cy2;
+          let d = Math.sqrt(dx * dx + dy * dy);
+          if (d < CLEAR) {
+            if (d < 0.01) {
+              dx = bcx - cx2;
+              dy = bcy - cy2;
+              d = Math.sqrt(dx * dx + dy * dy) || 1;
+            }
+            const push = (CLEAR - d) * 0.8;
+            nd.x += (dx / d) * push;
+            nd.y += (dy / d) * push;
+          }
+        }
+      }
+
       const m = 8;
       for (const nd of nodes) {
         if (nd.type === "core") continue;
@@ -270,11 +315,16 @@ function SkillGraphCanvas({ skills, logo }: { skills: SkillGroup[]; logo: string
         const outA = Math.atan2(hy - cy, hx - cx); // fan leaves outward from core
         c.items.forEach((s, j) => {
           const rl = makeRng(hashStr(s) ^ (i * 0x27d4eb2f) ^ (j * 0x165667b1));
+          // Wide fan so a cluster's branches DIVERGE (narrow fans make the
+          // branch lines run parallel and labels crowd the next branch). The
+          // per-leaf angle grows with the label so wide names splay more; the
+          // relaxation then only has to fine-tune, not untangle.
+          const spanPerLeaf = 0.85; // radians between adjacent leaves in a cluster
           const la =
             outA +
-            (j - (n - 1) / 2) * (1.3 / Math.max(n, 1)) +
-            (rl() - 0.5) * 0.6;
-          const ld = minWH * 0.15 * (0.82 + rl() * 0.45);
+            (j - (n - 1) / 2) * spanPerLeaf +
+            (rl() - 0.5) * 0.35;
+          const ld = minWH * 0.18 * (0.85 + rl() * 0.4);
           const leaf: Node = {
             type: "leaf",
             label: s,
@@ -313,8 +363,12 @@ function SkillGraphCanvas({ skills, logo }: { skills: SkillGroup[]; logo: string
 
       // relaxation: settle with spring, then separation-only so the FINAL state is
       // guaranteed overlap-free (springs can't tug two labels back together).
-      for (let k = 0; k < 220; k++) relaxStep(true);
-      for (let k = 0; k < 80; k++) relaxStep(false);
+      for (let k = 0; k < 260; k++) relaxStep(true);
+      for (let k = 0; k < 120; k++) relaxStep(false);
+      // final pass: label-separation only, so no label overlap can survive the
+      // edge-avoidance nudges (edge clearance runs before this and may push a
+      // label a hair into a neighbour; these passes settle that last).
+      for (let k = 0; k < 40; k++) relaxStep(false, false);
 
       // Fit-to-fill: uniformly scale the settled layout up around the core so it
       // fills the canvas (no big empty margins). Scaling only GROWS the gaps
@@ -367,7 +421,7 @@ function SkillGraphCanvas({ skills, logo }: { skills: SkillGroup[]; logo: string
       if (process.env.NODE_ENV !== "production") {
         try {
           (window as unknown as { __skillNodes?: unknown }).__skillNodes = nodes.map(
-            (n) => ({ label: n.label, type: n.type, hx: n.hx, hy: n.hy, lw: n.lw, lh: n.lh, r: n.r }),
+            (n) => ({ label: n.label, type: n.type, cat: n.cat, hx: n.hx, hy: n.hy, lw: n.lw, lh: n.lh, r: n.r }),
           );
         } catch {
           /* debug hook only */
