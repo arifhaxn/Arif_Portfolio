@@ -141,6 +141,14 @@ export function AboutView({
       if (correcting && userScrolled) return; // don't fight the user
       const el = document.querySelector<HTMLElement>(window.location.hash);
       if (!el) return;
+      // On a CLIENT-SIDE nav here (e.g. landing "Get in touch"/"Career"), Lenis
+      // still holds the PREVIOUS route's scroll limit — and the landing page is
+      // only one viewport tall, so its limit is ~0. Without re-measuring, the
+      // scrollTo below clamps to that stale limit and lands back at the top (the
+      // hero), never reaching #career/#contact. On desktop the curtain-pin path
+      // happened to call resize(); mobile has no pin, so it never did — which is
+      // why this only broke on phones. Re-measure on every viewport before scrolling.
+      lenisRef.current?.resize();
       const y = Math.max(0, el.getBoundingClientRect().top + window.scrollY - 96);
       if (lenisRef.current) lenisRef.current.scrollTo(y, { immediate: true });
       else window.scrollTo(0, y);
