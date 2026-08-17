@@ -52,8 +52,8 @@ export const DURATION = {
   modalReveal: 0.6, // Achievement modal pixelated image reveal
 } as const;
 
-/** Resting opacity of the Projects background polyhedron (ambient, not focal). */
-export const BG_SHAPE_OPACITY = 0.45;
+/** Resting opacity of the Projects background hypercube (ambient, not focal). */
+export const BG_SHAPE_OPACITY = 0.65;
 
 /**
  * Achievements grid — pan/warp + idle-drift tuning. Kept together so the whole

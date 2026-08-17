@@ -21,6 +21,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import {
+  AdditiveBlending,
   InstancedBufferAttribute,
   OctahedronGeometry,
   ShaderMaterial,
@@ -35,9 +36,11 @@ const VERT = /* glsl */ `
   uniform float uFuzz;
   uniform float uScale;
   uniform float uPScale;      // particle (octahedron) size in world units
+  uniform float uProj;        // 4D projection distance (higher = flatter, less flinging)
   attribute vec4 instanceA4;  // this instance's base coordinate on the 4-cube
   attribute float instancePhase;
   varying float vDepth;
+  varying float vDist;        // distance of this instance's centre from origin
   void main() {
     vec4 p = instanceA4;
     // breathing pulse
@@ -55,9 +58,10 @@ const VERT = /* glsl */ `
     Yf += cos(instancePhase * 1.7 - uTime) * uFuzz;
     Zf += sin(instancePhase * 2.1 + uTime * 1.2) * uFuzz;
     // stereographic projection 4D -> 3D → this instance's centre
-    float wf = 1.0 / (4.0 - Wf + 0.0001);
+    float wf = 1.0 / (uProj - Wf + 0.0001);
     vec3 centre = vec3(Xf, Yf, Zf) * wf * uScale;
-    vDepth = wf; // nearer in w = brighter
+    vDepth = wf;             // nearer in w = brighter
+    vDist = length(centre);  // for the edge fade (so nothing hard-clips)
     // place the octahedron's local vertex around the projected centre
     vec3 world = centre + position * uPScale;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(world, 1.0);
@@ -66,11 +70,19 @@ const VERT = /* glsl */ `
 
 const FRAG = /* glsl */ `
   precision mediump float;
+  uniform float uFadeNear;
+  uniform float uFadeFar;
   varying float vDepth;
+  varying float vDist;
   void main() {
-    float e = clamp((vDepth - 0.16) * 2.6, 0.0, 1.0); // normalise the w-factor
-    vec3 col = mix(vec3(0.231, 0.51, 0.965) * 0.75, vec3(0.85, 0.92, 1.0), e); // blue -> white
-    gl_FragColor = vec4(col, 1.0);
+    float e = clamp((vDepth - 0.10) * 3.0, 0.0, 1.0);              // w-factor → 0..1
+    vec3 col = mix(vec3(0.16, 0.44, 0.98), vec3(0.72, 0.86, 1.0), e); // blue -> white
+    // fade particles that fling far out (the projection singularity) so the swarm
+    // dissolves toward its edges instead of hard-clipping at the canvas border.
+    float fade = smoothstep(uFadeFar, uFadeNear, vDist);
+    float intensity = (0.35 + e * 0.65) * fade;
+    // additive: the alpha is the added weight, so dense edges glow bright/white.
+    gl_FragColor = vec4(col, intensity);
   }
 `;
 
@@ -124,8 +136,11 @@ function TesseractMesh({ count }: { count: number }) {
       uRot: { value: 0.35 },
       uBreath: { value: 1.2 },
       uFuzz: { value: 0.06 },
-      uScale: { value: 42 },
-      uPScale: { value: 0.42 },
+      uScale: { value: 60 },
+      uPScale: { value: 0.3 }, // small crisp specks (dense, like the reference)
+      uProj: { value: 5.0 }, // flatter projection → less flinging → fits the frame
+      uFadeNear: { value: 30 }, // full brightness within this radius
+      uFadeFar: { value: 42 }, // faded to nothing by here (before the canvas edge)
     }),
     [],
   );
@@ -144,6 +159,10 @@ function TesseractMesh({ count }: { count: number }) {
         uniforms={uniforms}
         vertexShader={VERT}
         fragmentShader={FRAG}
+        transparent
+        depthWrite={false}
+        depthTest={false}
+        blending={AdditiveBlending}
       />
     </instancedMesh>
   );
@@ -169,15 +188,21 @@ export function Tesseract() {
 
   const show = tier !== null && tier !== "low" && !reduce;
   const high = tier === "high";
-  const count = high ? 9600 : 4800;
+  const count = high ? 16000 : 8000; // dense, like the reference
 
   return (
-    <div ref={wrap} aria-hidden className="h-full w-full">
+    // Cheap "bloom": a compositor drop-shadow haloes the bright additive pixels
+    // (the same trick the robot uses), so it glows without a postprocessing pass.
+    <div
+      ref={wrap}
+      aria-hidden
+      className="h-full w-full [filter:drop-shadow(0_0_5px_rgba(59,130,246,0.45))]"
+    >
       {show && (
         <Canvas
           frameloop={inView ? "always" : "never"}
           dpr={[1, 2]} // full pixel ratio → sharp geometry, no upscale blur
-          camera={{ position: [0, 0, 60], fov: 55 }}
+          camera={{ position: [0, 0, 85], fov: 55 }}
           gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
         >
           <TesseractMesh count={count} />
