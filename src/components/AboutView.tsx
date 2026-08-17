@@ -343,11 +343,9 @@ export function AboutView({
         className="relative flex min-h-screen scroll-mt-24 flex-col justify-center overflow-hidden border-t border-white/5 px-6 py-24 sm:px-10"
       >
         {/* Ambient breathing-hypercube behind the contact copy (tier-gated). */}
-        <div className="pointer-events-none absolute inset-0 z-0 opacity-45">
+        <div className="pointer-events-none absolute inset-0 z-0 opacity-70">
           <Tesseract />
         </div>
-        {/* Soft center vignette so the contact copy stays legible over it. */}
-        <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_center,rgba(0,0,0,0.72)_0%,rgba(0,0,0,0.35)_45%,transparent_75%)]" />
         <div className="relative z-10 mx-auto w-full max-w-6xl">
           {/* labels */}
           <div className="flex items-center justify-between font-mono text-xs uppercase tracking-[0.3em] text-blue-400">
