@@ -391,7 +391,7 @@ export function HalftonePortrait({ src }: { src: string }) {
         <div className="flex h-full w-full flex-col items-center justify-center gap-3 overflow-hidden rounded-xl bg-gradient-to-br from-zinc-900 via-zinc-950 to-black ring-1 ring-white/15">
           <span className="font-mono text-6xl font-semibold text-white/10">AH</span>
           <span className="h-px w-12 bg-blue-500" />
-          <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-zinc-600">
+          <span className="font-mono text-[0.625rem] uppercase tracking-[0.25em] text-zinc-600">
             Portrait — placeholder
           </span>
         </div>

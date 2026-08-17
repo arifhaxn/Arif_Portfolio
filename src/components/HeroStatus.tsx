@@ -48,11 +48,11 @@ export function HeroStatus({
       <ScrambleText
         as="span"
         entrance="observer"
-        className="text-[10px] tracking-[0.25em] text-zinc-500"
+        className="text-[0.625rem] tracking-[0.25em] text-zinc-500"
       >
         {location}
       </ScrambleText>
-      <span className="mt-1 flex items-center gap-2 text-[10px] tracking-[0.25em] text-zinc-400">
+      <span className="mt-1 flex items-center gap-2 text-[0.625rem] tracking-[0.25em] text-zinc-400">
         <span className="relative flex h-1.5 w-1.5">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60 motion-reduce:hidden" />
           <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />

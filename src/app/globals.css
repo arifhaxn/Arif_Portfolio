@@ -31,6 +31,43 @@ body {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Large-display UI scaling — one knob for the whole public site               */
+/* -------------------------------------------------------------------------- */
+/* The design was drawn against a ~1440×630 CSS-pixel viewport — the "small
+   monitor" reference shots in .references/small monitor, which are 1919px images
+   of a HiDPI (~1.35×) display, so the LAYOUT there is ~1420 CSS px wide even
+   though the file is 1919px. Measured against those shots: the 4.5rem hero name
+   occupies 302 CSS px of advance, the header's 2.5rem gutter lands the nav at
+   x≈40. Every size in the site is expressed in rem via Tailwind utilities — type,
+   padding, gaps, widths, max-widths, radii — so on a wider display NOTHING grew:
+   the layout kept its 1440-sized furniture inside a bigger frame and read as
+   sparse and shrunken (.references/big monitor is the same site at ~1956 CSS px,
+   where every element measures ~0.72× the reference).
+   The fix is to make the root font size fluid ABOVE that reference viewport, so
+   1rem tracks the screen and the whole rem-based design scales with it. At
+   1956px wide the root becomes 21.7px — a 1.36× scale — which reproduces the
+   reference composition exactly, just larger.
+     • `100vw / 90`     → 16px at 1440px wide (the width the design targets).
+     • `100vh / 39.375` → 16px at 630px tall. `min()` with the width term keeps a
+       short-but-wide window (ultrawides, half-height windows) from scaling type
+       up past what its HEIGHT can hold.
+     • `clamp()` floor of 1rem: at or below the reference viewport the scale is
+       exactly 1 — so phones, tablets and ordinary laptops render byte-identical
+       to before. Nothing here can shrink the site; it only ever grows.
+     • Ceiling of 3rem so a wall-sized display eventually stops growing.
+   Floor/ceiling are in `rem` (on the root element that resolves against the
+   BROWSER's default size) so a user who has set a larger default text size
+   keeps it. Media-query breakpoints are unaffected: `rem` inside a media query
+   always resolves against the initial 16px, never against this declaration.
+   Scoped via `:has()` to documents that render the public-site chrome (the
+   (site) layout drops the [data-site-scale] marker) — /admin is a plain tool UI
+   and stays at the browser's own size. `:has()` matches during the FIRST style
+   pass, so there is no unscaled flash the way a hydration-set class would have. */
+html:has([data-site-scale]) {
+  font-size: clamp(1rem, min(100vw / 90, 100vh / 39.375), 3rem);
+}
+
+/* -------------------------------------------------------------------------- */
 /* Responsive / mobile "app" foundations                                       */
 /* -------------------------------------------------------------------------- */
 /* Never allow a sideways scroll on any screen (marquees, off-canvas transforms,

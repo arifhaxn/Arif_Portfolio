@@ -80,7 +80,7 @@ export function AchievementCard({
         >
           {achievement.title}
         </ScrambleText>
-        <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+        <p className="font-mono text-[0.625rem] uppercase tracking-[0.2em] text-zinc-400">
           {achievement.issuer}
         </p>
       </div>

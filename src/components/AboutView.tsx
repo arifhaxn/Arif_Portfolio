@@ -219,7 +219,7 @@ export function AboutView({
         {/* Scroll cue — animated sliding segment (same motion as the projects
             section's case-study cue). Sits above the portrait (z-20). */}
         <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-3 text-blue-400">
-          <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">
+          <span className="font-mono text-[0.625rem] uppercase tracking-[0.3em] text-zinc-500">
             {about.heroStatus.scrollCue}
           </span>
           <span className="relative block h-12 w-px overflow-hidden">

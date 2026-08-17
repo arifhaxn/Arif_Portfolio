@@ -44,6 +44,12 @@ export function NextProjectChain({
   const SIZE = NEXT_PROJECT.ringSize;
   const RADIUS = SIZE / 2 - NEXT_PROJECT.ringStroke - 2;
   const CIRC = 2 * Math.PI * RADIUS;
+  // The ring's geometry below stays in SIZE-based USER units (so RADIUS/CIRC and
+  // the dashoffset animation are untouched); a viewBox maps those onto a box laid
+  // out in rem, which rides the large-display UI scale (globals.css / lib/uiScale).
+  // Without it the ring alone stayed 96px on a big monitor while its rem-sized
+  // counter grew — a "100" outgrowing the circle it sits inside.
+  const SIZE_CSS = `${SIZE / 16}rem`;
 
   useGSAP(
     () => {
@@ -114,8 +120,12 @@ export function NextProjectChain({
         aria-hidden
         className="pointer-events-none fixed bottom-10 left-1/2 z-[90] flex -translate-x-1/2 items-center gap-5 opacity-0 motion-reduce:hidden"
       >
-        <div className="relative shrink-0" style={{ width: SIZE, height: SIZE }}>
-          <svg width={SIZE} height={SIZE} className="-rotate-90">
+        <div className="relative shrink-0" style={{ width: SIZE_CSS, height: SIZE_CSS }}>
+          <svg
+            viewBox={`0 0 ${SIZE} ${SIZE}`}
+            style={{ width: SIZE_CSS, height: SIZE_CSS }}
+            className="-rotate-90"
+          >
             <circle
               cx={SIZE / 2}
               cy={SIZE / 2}
@@ -145,7 +155,7 @@ export function NextProjectChain({
           </span>
         </div>
         <div className="whitespace-nowrap">
-          <span className="block font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-400">
+          <span className="block font-mono text-[0.625rem] uppercase tracking-[0.3em] text-zinc-400">
             {label}
           </span>
           <span className="block text-2xl font-bold text-white sm:text-3xl">

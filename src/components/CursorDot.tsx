@@ -20,9 +20,13 @@ import { useEffect, useRef, useState } from "react";
 import { gsap } from "@/lib/gsap";
 import { cursorChase } from "@/lib/animations";
 import { CURSOR } from "@/lib/motion";
+import { useUiScale } from "@/lib/uiScale";
 
 export function CursorDot() {
   const dot = useRef<HTMLDivElement>(null);
+  // The dot is the cursor, so it has to keep its apparent size against the type
+  // and controls around it — which grow on a large display (see lib/uiScale).
+  const scale = useUiScale();
   // Rendered only where there's a real, hovering pointer. Starts false so SSR and
   // the first client render agree (no hydration mismatch); flipped on after mount.
   const [active, setActive] = useState(false);
@@ -41,7 +45,7 @@ export function CursorDot() {
 
     document.documentElement.classList.add("cursor-none");
 
-    const half = CURSOR.size / 2;
+    const half = (CURSOR.size * scale) / 2;
     const setX = gsap.quickSetter(el, "x", "px");
     const setY = gsap.quickSetter(el, "y", "px");
     const setOpacity = gsap.quickSetter(el, "opacity");
@@ -61,7 +65,7 @@ export function CursorDot() {
       stop();
       document.documentElement.classList.remove("cursor-none");
     };
-  }, [active]);
+  }, [active, scale]);
 
   if (!active) return null;
 
@@ -70,7 +74,7 @@ export function CursorDot() {
       ref={dot}
       aria-hidden
       className="pointer-events-none fixed left-0 top-0 z-[9999] rounded-full bg-white will-change-transform"
-      style={{ width: CURSOR.size, height: CURSOR.size }}
+      style={{ width: CURSOR.size * scale, height: CURSOR.size * scale }}
     />
   );
 }

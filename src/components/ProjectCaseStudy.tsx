@@ -276,10 +276,10 @@ export function ProjectCaseStudy({
                   className="grid grid-cols-[6.5rem_1fr] items-start gap-x-6 border-t border-white/10 py-5"
                 >
                   <dt
-                    className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em]"
+                    className="flex items-center gap-2 font-mono text-[0.6875rem] uppercase tracking-[0.2em]"
                     style={{ color: accent }}
                   >
-                    <span className="text-[7px] leading-none">●</span>
+                    <span className="text-[0.4375rem] leading-none">●</span>
                     {r.label}
                   </dt>
                   <dd className="text-sm leading-relaxed text-white/85">{r.value}</dd>
@@ -319,7 +319,7 @@ export function ProjectCaseStudy({
               {/* LEFT — active shot's index + title (changes with the deck) */}
               <div className="sticky top-0 flex h-screen flex-col justify-center">
                 <div ref={galleryInfoRef}>
-                  <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-zinc-500">
+                  <p className="font-mono text-[0.6875rem] uppercase tracking-[0.25em] text-zinc-500">
                     {project.name} — {String(activeShot + 1).padStart(2, "0")} /{" "}
                     {shotCount}
                   </p>
@@ -428,7 +428,7 @@ export function ProjectCaseStudy({
                       className="object-cover"
                     />
                   </button>
-                  <figcaption className="grid grid-cols-3 items-start font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-500">
+                  <figcaption className="grid grid-cols-3 items-start font-mono text-[0.6875rem] uppercase tracking-[0.2em] text-zinc-500">
                     <span className="text-zinc-600">
                       {String(i + 1).padStart(2, "0")}
                     </span>
@@ -569,7 +569,7 @@ function GalleryLightbox({
 
         <div className="mt-4 flex items-start justify-between gap-6">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-zinc-500">
+            <p className="font-mono text-[0.625rem] uppercase tracking-[0.25em] text-zinc-500">
               {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
             </p>
             <h2 className="mt-1 text-xl font-semibold tracking-tight text-white">
@@ -597,7 +597,7 @@ function ScrollCue({ accent, label }: { accent: string; label: string }) {
       className="pointer-events-none flex flex-col items-center gap-3"
       style={{ color: accent }}
     >
-      <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-500">
+      <span className="font-mono text-[0.625rem] uppercase tracking-[0.3em] text-zinc-500">
         {label}
       </span>
       <span className="relative block h-12 w-px overflow-hidden">

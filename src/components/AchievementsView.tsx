@@ -47,6 +47,11 @@ const SpaceTimeFabric = dynamic(
 // pan range).
 const COLS = 4;
 const CARD_W = 300; // fixed column WIDTH; each card's height follows its scan
+// …expressed in rem so the column rides the large-display UI scale (globals.css /
+// lib/uiScale) like the rest of the board. As raw px the cards stayed 300 wide on
+// a big monitor while the type inside them grew, and the focus label — sized in
+// rem — started wrapping to three lines inside a card that never got any wider.
+const CARD_W_CSS = `${CARD_W / 16}rem`;
 
 export function AchievementsView({ content }: { content: AchievementsContent }) {
   const root = useRef<HTMLElement>(null);
@@ -166,7 +171,7 @@ export function AchievementsView({ content }: { content: AchievementsContent }) 
           <div className="flex flex-col gap-20 pt-16">
             {GROUPS.map(({ category, items }) => (
               <section key={category} className="flex flex-col gap-5">
-                <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-zinc-500">
+                <p className="font-mono text-[0.6875rem] uppercase tracking-[0.25em] text-zinc-500">
                   <span className="text-zinc-300">/ {category}</span>
                   <span className="ml-3 text-zinc-600">
                     {String(items.length).padStart(2, "0")}
@@ -174,7 +179,7 @@ export function AchievementsView({ content }: { content: AchievementsContent }) 
                 </p>
                 <div
                   className="grid items-start gap-x-24 gap-y-24"
-                  style={{ gridTemplateColumns: `repeat(${COLS}, ${CARD_W}px)` }}
+                  style={{ gridTemplateColumns: `repeat(${COLS}, ${CARD_W_CSS})` }}
                 >
                   {items.map((a) => {
                     // Focus identity must be globally unique: certificate ids
@@ -186,7 +191,7 @@ export function AchievementsView({ content }: { content: AchievementsContent }) 
                       <div
                         key={cellKey}
                         data-cell
-                        style={{ width: CARD_W }}
+                        style={{ width: CARD_W_CSS }}
                         className="will-change-transform"
                         onMouseEnter={() => focus(cellKey)}
                         onMouseLeave={() => focus(null)}
@@ -220,12 +225,12 @@ export function AchievementsView({ content }: { content: AchievementsContent }) 
         >
           {content.eyebrow}
         </ScrambleText>
-        <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+        <p className="mt-1 font-mono text-[0.625rem] uppercase tracking-[0.2em] text-zinc-500">
           {content.subtitle}
         </p>
       </div>
       {/* Bottom-right: live stat readout (3-line, label + value). */}
-      <div className="pointer-events-none absolute bottom-8 right-6 z-20 hidden font-mono text-[10px] uppercase tracking-[0.2em] sm:right-10 lg:block">
+      <div className="pointer-events-none absolute bottom-8 right-6 z-20 hidden font-mono text-[0.625rem] uppercase tracking-[0.2em] sm:right-10 lg:block">
         <div className="grid grid-cols-[auto_auto] gap-x-6 gap-y-1">
           <span className="text-zinc-600">Certificates</span>
           <span className="text-right tabular-nums text-zinc-300">{certCount}</span>
@@ -258,7 +263,7 @@ export function AchievementsView({ content }: { content: AchievementsContent }) 
         {/* Stat readout — each stat is one intact flex item so a narrow screen
             wraps BETWEEN stats, never splitting a label from its value (the old
             single line broke as "SWITCHES / 000"). */}
-        <div className="mt-6 flex flex-wrap gap-x-5 gap-y-1.5 border-t border-white/5 pt-5 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+        <div className="mt-6 flex flex-wrap gap-x-5 gap-y-1.5 border-t border-white/5 pt-5 font-mono text-[0.625rem] uppercase tracking-[0.2em] text-zinc-500">
           <span>
             Certificates <span className="tabular-nums text-zinc-300">{certCount}</span>
           </span>
@@ -272,7 +277,7 @@ export function AchievementsView({ content }: { content: AchievementsContent }) 
 
         {GROUPS.map(({ category, items }) => (
           <section key={category} className="mt-12">
-            <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-zinc-500">
+            <p className="font-mono text-[0.6875rem] uppercase tracking-[0.25em] text-zinc-500">
               <span className="text-zinc-300">/ {category}</span>
               <span className="ml-3 text-zinc-600">
                 {String(items.length).padStart(2, "0")}

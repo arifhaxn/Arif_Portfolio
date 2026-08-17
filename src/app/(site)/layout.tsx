@@ -22,6 +22,13 @@ export default async function SiteLayout({
   const nav = await getNavbar();
   return (
     <>
+      {/* Opts this document into the large-display UI scale (globals.css keys the
+          fluid root font-size off `html:has([data-site-scale])`). It's a marker,
+          not a wrapper: `hidden` means display:none, so it adds no box and can't
+          disturb the body → main flex chain. Server-rendered, so the scale is in
+          effect on the very first paint — no unscaled flash. /admin has no such
+          marker and therefore keeps the browser's own text size. */}
+      <div data-site-scale hidden />
       {/* Stamp data-quality-tier on <html> so CSS ambient animations can scale
           down on weak devices (same tier the 3D HeroHead uses). */}
       <QualityTierMarker />

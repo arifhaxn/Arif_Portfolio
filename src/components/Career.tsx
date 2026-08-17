@@ -27,6 +27,7 @@ import { careerLineDraw, prefersReducedMotion } from "@/lib/animations";
 import { CAREER as C } from "@/lib/motion";
 import { type CareerEntry } from "@/lib/career";
 import { ScrambleText } from "@/components/ScrambleText";
+import { uiScale } from "@/lib/uiScale";
 
 const MOBILE_LINE_X = 10; // px from the wrapper's left edge for the mobile line
 const CORNER = 16; // elbow corner radius (px)
@@ -36,6 +37,11 @@ type Seg = { path: SVGPathElement; len: number; cumBefore: number };
 type Scene = {
   segs: Seg[];
   total: number;
+  /** UI scale this scene was measured at (see lib/uiScale) — the connector's own
+   *  pixel constants (stroke, dot radii, card gap, elbow radius) multiply by it
+   *  so the circuit thickens with the cards it wires together instead of
+   *  thinning into a hairline on a big monitor. */
+  s: number;
   reachAt: number[]; // draw fraction at which the line reaches each card
   // Junction dots — one at EVERY connector endpoint (each card's entry + exit),
   // each with the draw fraction at which the front reaches it.
@@ -71,7 +77,7 @@ function CareerCard({ entry, marker }: { entry: CareerEntry; marker: string }) {
             </ScrambleText>
           </div>
         </div>
-        <span className="shrink-0 whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.15em] text-zinc-500">
+        <span className="shrink-0 whitespace-nowrap font-mono text-[0.625rem] uppercase tracking-[0.15em] text-zinc-500">
           {entry.period}
         </span>
       </div>
@@ -118,6 +124,13 @@ export function Career({
       const buildScene = (isDesktop: boolean, cardSel: string): Scene => {
         const cards = gsap.utils.toArray<HTMLElement>(cardSel, wrap);
         const wr = wrap.getBoundingClientRect();
+        // The card boxes this line is measured FROM are rem-sized, so they already
+        // grew on a large display; these raw-pixel constants have to be brought
+        // along or the connector would read as a thread between oversized cards.
+        const S = uiScale();
+        const gap = C.gap * S;
+        const corner = CORNER * S;
+        const lineX = MOBILE_LINE_X * S;
         const m = cards.map((c) => {
           const r = c.getBoundingClientRect();
           return {
@@ -136,12 +149,12 @@ export function Career({
           for (let j = 0; j < cards.length - 1; j++) {
             const a = m[j];
             const b = m[j + 1];
-            const exitX = ENTRIES[j].side === "left" ? a.right + C.gap : a.left - C.gap;
+            const exitX = ENTRIES[j].side === "left" ? a.right + gap : a.left - gap;
             const exitY = a.cy;
             const dropX = (b.left + b.right) / 2; // drop onto the next card's TOP-CENTER
-            const dropEndY = b.top - C.gap;
+            const dropEndY = b.top - gap;
             const dir = dropX >= exitX ? 1 : -1;
-            const R = Math.max(2, Math.min(CORNER, Math.abs(dropX - exitX) / 2, Math.abs(dropEndY - exitY) / 2));
+            const R = Math.max(2 * S, Math.min(corner, Math.abs(dropX - exitX) / 2, Math.abs(dropEndY - exitY) / 2));
             const d = `M ${exitX} ${exitY} H ${dropX - dir * R} Q ${dropX} ${exitY} ${dropX} ${exitY + R} V ${dropEndY}`;
             const path = segRefs.current[j];
             if (!path) continue;
@@ -166,7 +179,7 @@ export function Career({
             const yLast = m[m.length - 1].cy;
             const path = segRefs.current[0];
             if (path) {
-              path.setAttribute("d", `M ${MOBILE_LINE_X} ${y0} V ${yLast}`);
+              path.setAttribute("d", `M ${lineX} ${y0} V ${yLast}`);
               const len = Math.max(path.getTotalLength(), 1);
               gsap.set(path, { strokeDasharray: len, strokeDashoffset: len });
               segs.push({ path, len, cumBefore: 0 });
@@ -174,7 +187,7 @@ export function Career({
             }
           }
           m.forEach((mm) =>
-            nodeRaw.push({ x: MOBILE_LINE_X, y: mm.cy, cum: mm.cy - (m[0]?.cy ?? 0) }),
+            nodeRaw.push({ x: lineX, y: mm.cy, cum: mm.cy - (m[0]?.cy ?? 0) }),
           );
         }
 
@@ -225,7 +238,15 @@ export function Career({
             pulseRef.current.style.visibility = "hidden";
           }
         }
-        return { segs, total, reachAt, nodes, cards };
+        // Line weight + the two fixed-radius circles are authored in px on the
+        // JSX below; re-stamp them at the current scale now that we know it.
+        // (render() handles the junction dots, whose radius it animates.)
+        segRefs.current.forEach((path) =>
+          path?.setAttribute("stroke-width", String(C.stroke * S)),
+        );
+        pulseRef.current?.setAttribute("r", String(C.nodeFlare * S));
+        tipRef.current?.setAttribute("r", String(C.tip * S));
+        return { segs, total, reachAt, nodes, cards, s: S };
       };
 
       const revealDir = (isDesktop: boolean, i: number) =>
@@ -257,7 +278,7 @@ export function Career({
 
         // Paint everything from one progress value.
         const render = (p: number) => {
-          const { segs, total, reachAt, nodes, cards } = scene;
+          const { segs, total, reachAt, nodes, cards, s: S } = scene;
           const globalLen = clamp(p, 0, 1) * total;
           // Draw each connector segment in sequence (cumulative length).
           segs.forEach((s) => {
@@ -298,7 +319,7 @@ export function Career({
             const nd = nodeRefs.current[i];
             if (!nd) return;
             const amt = clamp((p - (node.reach - 0.02)) / 0.05, 0, 1);
-            nd.setAttribute("r", String(C.node + (C.nodeFlare - C.node) * amt));
+            nd.setAttribute("r", String((C.node + (C.nodeFlare - C.node) * amt) * S));
             nd.style.opacity = String(0.28 + 0.72 * amt);
           });
         };

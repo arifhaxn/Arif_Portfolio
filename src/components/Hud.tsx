@@ -80,7 +80,7 @@ export function LiveStatus({
   }, [statusWords.length]);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[0.625rem] uppercase tracking-[0.2em] text-zinc-500">
       <span className="tabular-nums">{time ?? "--:--:--"}</span>
       <span>{locationLabel}</span>
       <span ref={phraseRef} className="text-zinc-300">
@@ -93,7 +93,7 @@ export function LiveStatus({
 /** Bottom-right "YEAR / CODING SINCE" meta. Year comes from content/hero. */
 export function CodingSince({ year }: { year: string }) {
   return (
-    <div className="text-right font-mono text-[10px] uppercase tracking-[0.2em]">
+    <div className="text-right font-mono text-[0.625rem] uppercase tracking-[0.2em]">
       <span className="block text-zinc-300">{year}</span>
       <span className="block text-zinc-600">Coding since</span>
     </div>

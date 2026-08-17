@@ -32,6 +32,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { prefersReducedMotion } from "@/lib/animations";
 import { detectQualityTier, type QualityTier } from "@/lib/quality";
+import { uiScale } from "@/lib/uiScale";
 import { ScrambleText } from "@/components/ScrambleText";
 
 type SkillGroup = { label: string; items: string[] };
@@ -140,8 +141,12 @@ function SkillGraphCanvas({ skills, logo }: { skills: SkillGroup[]; logo: string
 
     const sizeOf = (t: Node["type"]) => (t === "core" ? 13 : t === "hub" ? 12 : 15);
 
+    // W/H are DESIGN pixels (see resize) — the same numbers on every display.
     let W = 0;
     let H = 0;
+    // Design-pixels → CSS-pixels factor folded into the canvas transform by
+    // resize(); pointer events arrive in CSS pixels and divide back down by it.
+    let pointerScale = 1;
     let raf = 0;
     let running = false;
     let revealed = false;
@@ -432,14 +437,26 @@ function SkillGraphCanvas({ skills, logo }: { skills: SkillGroup[]; logo: string
     const resize = () => {
       const rect = wrap.getBoundingClientRect();
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      W = Math.max(1, rect.width);
+      // Every number in this graph — node radii, label font sizes, the GAP/CLEAR
+      // relaxation distances, the canvas height ramp — is a raw pixel literal, so
+      // on a big monitor the whole constellation would have stayed 1920-sized
+      // inside a container that grew (see lib/uiScale). Rather than multiply each
+      // literal, fold the scale into the context transform and keep W/H in DESIGN
+      // pixels: the layout then solves in exactly the same coordinate space at
+      // every viewport and simply draws bigger. A happy side effect is that the
+      // `W >= 1024` height branch and the collision relaxation now see identical
+      // inputs on a 1920 and a 2560 screen, so the graph's SHAPE is stable too.
+      const S = uiScale();
+      W = Math.max(1, rect.width / S);
       // canvas grows taller as branches are added, so there's always room
       const total = 1 + skills.length + totalSkills;
       H = clamp((W >= 1024 ? 680 : 560) + Math.max(0, total - 14) * 15, 560, 960);
-      canvas.style.height = `${H}px`;
-      canvas.width = Math.round(W * dpr);
-      canvas.height = Math.round(H * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // CSS box is the design height scaled up; the backing store adds DPR on top.
+      canvas.style.height = `${H * S}px`;
+      canvas.width = Math.round(W * S * dpr);
+      canvas.height = Math.round(H * S * dpr);
+      ctx.setTransform(dpr * S, 0, 0, dpr * S, 0, 0);
+      pointerScale = S;
       build(!revealed);
     };
 
@@ -633,8 +650,10 @@ function SkillGraphCanvas({ skills, logo }: { skills: SkillGroup[]; logo: string
 
     const onMove = (e: PointerEvent) => {
       const r = canvas.getBoundingClientRect();
-      mouse.x = e.clientX - r.left;
-      mouse.y = e.clientY - r.top;
+      // Back into design space so the proximity tests below (EDGE_HIT, the repel
+      // radius) keep the same on-screen feel at every scale.
+      mouse.x = (e.clientX - r.left) / pointerScale;
+      mouse.y = (e.clientY - r.top) / pointerScale;
       mouse.active = true;
     };
     const onLeave = () => {
@@ -674,10 +693,10 @@ function SkillGraphCanvas({ skills, logo }: { skills: SkillGroup[]; logo: string
 
   return (
     <div ref={wrapRef} aria-hidden className="relative">
-      <div className="pointer-events-none absolute left-0 top-0 z-10 font-mono text-[10px] uppercase tracking-[0.15em] text-zinc-600">
+      <div className="pointer-events-none absolute left-0 top-0 z-10 font-mono text-[0.625rem] uppercase tracking-[0.15em] text-zinc-600">
         move cursor near a link to trace
       </div>
-      <div className="pointer-events-none absolute right-0 top-0 z-10 text-right font-mono text-[10px] uppercase tracking-[0.15em] text-zinc-600">
+      <div className="pointer-events-none absolute right-0 top-0 z-10 text-right font-mono text-[0.625rem] uppercase tracking-[0.15em] text-zinc-600">
         {activeLabel ? (
           <span className="text-blue-400">› {activeLabel}</span>
         ) : (

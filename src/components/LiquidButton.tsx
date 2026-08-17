@@ -31,10 +31,15 @@ import {
   prefersReducedMotion,
 } from "@/lib/animations";
 import { LIQUID } from "@/lib/motion";
+import { uiScale } from "@/lib/uiScale";
 
 // Rest badge inset from the pill edges (px). The fill floods from this inset
 // circle out to edge-to-edge (inset → 0) on hover.
 const INSET = 6;
+// The same inset as CSS, for the markup's pre-GSAP first paint. Kept in rem so it
+// tracks the large-display UI scale (lib/uiScale) exactly the way `INSET *
+// uiScale()` does below — the two must agree or the badge would jump on mount.
+const INSET_CSS = `${INSET / 16}rem`;
 
 type LiquidButtonProps = {
   children: ReactNode;
@@ -69,7 +74,10 @@ export function LiquidButton({
     if (!root || !fill || !label) return;
 
     const build = () => {
-      const inset = INSET; // rest badge inset from the pill edges
+      // The pill itself is rem-sized and grows on a large display (lib/uiScale),
+      // so a fixed 6px ring around the badge would read as a tighter and tighter
+      // hairline there. Scale it with the pill.
+      const inset = INSET * uiScale();
       const restW = Math.max(0, root.clientHeight - inset * 2); // inset circle diameter
       tlRef.current?.kill();
       tlRef.current = liquidFillTimeline({
@@ -127,9 +135,9 @@ export function LiquidButton({
         aria-hidden
         className="pointer-events-none absolute z-0 rounded-full"
         style={{
-          top: INSET,
-          left: INSET,
-          bottom: INSET,
+          top: INSET_CSS,
+          left: INSET_CSS,
+          bottom: INSET_CSS,
           width: "2.25rem",
           backgroundColor: LIQUID.ink,
         }}
@@ -164,7 +172,7 @@ export function LiquidButton({
             overrides the class. */}
         <span
           ref={labelRef}
-          className="text-[15px] font-semibold tracking-tight text-[#0a0a0a]"
+          className="text-[0.9375rem] font-semibold tracking-tight text-[#0a0a0a]"
         >
           {children}
         </span>

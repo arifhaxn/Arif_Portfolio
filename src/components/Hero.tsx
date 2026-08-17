@@ -119,7 +119,7 @@ export function Hero({ hero }: { hero: HeroContent }) {
           decoration and there's no room for it beside the clock without overlap. */}
       <div
         data-hero-line
-        className="absolute right-6 top-1/2 z-10 hidden -translate-y-1/2 text-right font-mono text-[10px] uppercase leading-relaxed tracking-[0.2em] text-zinc-500 sm:right-10 sm:block"
+        className="absolute right-6 top-1/2 z-10 hidden -translate-y-1/2 text-right font-mono text-[0.625rem] uppercase leading-relaxed tracking-[0.2em] text-zinc-500 sm:right-10 sm:block"
       >
         <span className="block text-zinc-300">{hero.tagline.primary}</span>
         <span className="block">{hero.tagline.secondary}</span>

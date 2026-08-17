@@ -161,7 +161,7 @@ export function AchievementModal({
                 {achievement.id}
               </span>
               <span aria-hidden className="h-px w-16 bg-blue-500" />
-              <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-zinc-600">
+              <span className="font-mono text-[0.625rem] uppercase tracking-[0.25em] text-zinc-600">
                 Certificate image coming soon
               </span>
             </div>
@@ -191,13 +191,13 @@ export function AchievementModal({
         {/* Caption row. */}
         <div className="mt-4 flex items-start justify-between gap-6">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-blue-400">
+            <p className="font-mono text-[0.625rem] uppercase tracking-[0.25em] text-blue-400">
               / {achievement.category}
             </p>
             <h2 className="mt-1 text-xl font-semibold tracking-tight text-white">
               {achievement.title}
             </h2>
-            <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-400">
+            <p className="mt-1 font-mono text-[0.6875rem] uppercase tracking-[0.2em] text-zinc-400">
               {achievement.issuer}
             </p>
           </div>
