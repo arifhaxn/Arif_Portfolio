@@ -428,6 +428,12 @@ const DRAG_MAX_X = 1.2; // ~69° up/down
 // Per-frame ease of the drag rotation back to 0 once released, so the figure
 // springs back to the orientation it loaded with (higher = snappier return).
 const DRAG_RETURN_LERP = 0.06;
+// Tap-vs-drag threshold (px) for `onActivate`. A drag ENDS with a pointerup on
+// the figure as well, so treating every release as a click would fire the action
+// on every spin. Only a release that barely moved from its press counts as a tap.
+// Same discriminator (and value) the achievements board uses to tell a card click
+// from a board pan — see AchievementsView's `openIfClick`.
+const TAP_SLOP = 6;
 
 // Wireframe treatments. The polyhedron keeps the site's dim-gray look; the robot
 // gets the bright additive/glow treatment (unchanged from the full-wireframe
@@ -575,6 +581,7 @@ function ShapeMeshes({
   bindExit,
   draggable = false,
   drag,
+  onActivate,
   particleScale = 1,
 }: {
   /** Style A geometry — line set (robot) or wireframe mesh (icosahedron). */
@@ -605,6 +612,9 @@ function ShapeMeshes({
   /** Accumulated drag rotation (radians), added to the group each frame. Owned by
    *  HeroHead so it persists across re-renders; mutated by the drag handlers. */
   drag?: React.RefObject<{ x: number; y: number }>;
+  /** Run this when the figure is TAPPED (landing robot → /about). Only a press
+   *  and release that barely moved counts, so it never fires ending a drag. */
+  onActivate?: () => void;
   /** Device-tier particle-grid thinning (1 = full count), forwarded to the field. */
   particleScale?: number;
 }) {
@@ -625,6 +635,9 @@ function ShapeMeshes({
   const { gl } = useThree();
   const dragging = useRef(false);
   const lastPtr = useRef({ x: 0, y: 0 });
+  // Where the current press started, so the release can tell a tap from a drag
+  // (see TAP_SLOP). Null between gestures.
+  const downPtr = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (!draggable || !drag) return;
@@ -641,6 +654,12 @@ function ShapeMeshes({
       lastPtr.current = { x: e.clientX, y: e.clientY };
     };
     const onUp = () => {
+      // Any release ends this gesture's candidacy to be a tap — including one that
+      // lands OFF the figure, where R3F's onPointerUp never fires and the press
+      // position would otherwise linger into the next gesture. This runs after the
+      // canvas-level handler (the event bubbles canvas → window), so onRelease has
+      // already had its chance to read the press position.
+      downPtr.current = null;
       if (!dragging.current) return;
       dragging.current = false;
       gl.domElement.style.cursor = "grab";
@@ -653,15 +672,27 @@ function ShapeMeshes({
     };
   }, [draggable, drag, gl]);
 
-  const onGrab = useCallback(
+  const onPress = useCallback(
     (e: ThreeEvent<PointerEvent>) => {
-      if (!draggable) return;
       e.stopPropagation();
+      downPtr.current = { x: e.clientX, y: e.clientY };
+      if (!draggable) return;
       dragging.current = true;
       lastPtr.current = { x: e.clientX, y: e.clientY };
       gl.domElement.style.cursor = "grabbing";
     },
     [draggable, gl],
+  );
+  // R3F only fires this when the release lands ON the figure, so letting go
+  // somewhere else after swinging it away can't trigger the action either.
+  const onRelease = useCallback(
+    (e: ThreeEvent<PointerEvent>) => {
+      const from = downPtr.current;
+      downPtr.current = null;
+      if (!onActivate || !from) return;
+      if (Math.hypot(e.clientX - from.x, e.clientY - from.y) < TAP_SLOP) onActivate();
+    },
+    [onActivate],
   );
   const onHoverIn = useCallback(() => {
     if (draggable && !dragging.current) gl.domElement.style.cursor = "grab";
@@ -875,7 +906,8 @@ function ShapeMeshes({
           geometry={solidGeometry}
           rotation={poseA}
           renderOrder={2}
-          onPointerDown={draggable ? onGrab : undefined}
+          onPointerDown={draggable || onActivate ? onPress : undefined}
+          onPointerUp={onActivate ? onRelease : undefined}
           onPointerOver={draggable ? onHoverIn : undefined}
           onPointerOut={draggable ? onHoverOut : undefined}
         >
@@ -1015,6 +1047,7 @@ function RobotShape({
   bindExit,
   draggable = false,
   drag,
+  onActivate,
   particleScale = 1,
 }: {
   tilt: React.RefObject<{ x: number; y: number }>;
@@ -1025,6 +1058,7 @@ function RobotShape({
   bindExit?: (fn: (() => Promise<void>) | null) => void;
   draggable?: boolean;
   drag?: React.RefObject<{ x: number; y: number }>;
+  onActivate?: () => void;
   particleScale?: number;
 }) {
   const { scene } = useGLTF("/robot.glb");
@@ -1087,6 +1121,7 @@ function RobotShape({
       bindExit={bindExit}
       draggable={draggable}
       drag={drag}
+      onActivate={onActivate}
       particleScale={particleScale}
     />
   );
@@ -1146,6 +1181,7 @@ export function HeroHead({
   scan = false,
   draggable = false,
   scanOnReveal = false,
+  onActivate,
 }: {
   shape?: HeadShape;
   /** Continuous slow auto-spin about Y (radians/sec). Mouse tilt still applies. */
@@ -1160,6 +1196,11 @@ export function HeroHead({
   /** Start the robot scan-in on the intro reveal (landing) instead of on mount,
    *  so it syncs with the hero text. Robot only. */
   scanOnReveal?: boolean;
+  /** Run this when the figure is TAPPED — the landing robot uses it to route to
+   *  /about. A drag ends on the figure too, so only a press and release that
+   *  barely moved counts as a tap (TAP_SLOP); swinging it never fires. Robot
+   *  only, and it makes the figure interactive the same way `draggable` does. */
+  onActivate?: () => void;
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
   const [inView, setInView] = useState(true);
@@ -1234,10 +1275,10 @@ export function HeroHead({
   return (
     <div
       ref={wrapper}
-      // When draggable, re-enable pointer events (the landing container is
-      // pointer-events-none) so R3F can raycast the figure; the grab/grabbing
-      // cursor is set by the drag handlers only while over the robot.
-      className={`h-full w-full ${draggable ? "pointer-events-auto" : ""} ${
+      // When draggable OR tappable, re-enable pointer events (the landing
+      // container is pointer-events-none) so R3F can raycast the figure; the
+      // grab/grabbing cursor is set by the drag handlers only while over the robot.
+      className={`h-full w-full ${draggable || onActivate ? "pointer-events-auto" : ""} ${
         glow ? ROBOT_GLOW_CLASS : ""
       }`}
     >
@@ -1267,6 +1308,7 @@ export function HeroHead({
                 bindExit={bindExit}
                 draggable={draggable}
                 drag={drag}
+                onActivate={onActivate}
                 particleScale={q.particleScale}
               />
             ) : (

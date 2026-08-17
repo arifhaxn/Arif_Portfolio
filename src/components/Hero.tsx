@@ -14,7 +14,7 @@
 // the model up so it fills the viewport like the reference figure.
 // -----------------------------------------------------------------------------
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { gsap, useGSAP } from "@/lib/gsap";
@@ -28,6 +28,7 @@ import { useHeadScan } from "@/components/providers/HeadScanProvider";
 import type { HeroContent } from "@/lib/content-types";
 
 const CONTACT_HREF = "/about#contact";
+const ABOUT_HREF = "/about";
 
 const HeroHead = dynamic(
   () => import("@/components/HeroHead").then((m) => m.HeroHead),
@@ -51,6 +52,18 @@ export function Hero({ hero }: { hero: HeroContent }) {
       router.push(CONTACT_HREF, { scroll: false }),
     );
   };
+
+  // Tapping the robot goes to /about — same exit-scan hand-off as the CTA above
+  // (the robot IS the thing that scans out, so it dissolves under your finger and
+  // the next page arrives once it's gone). HeroHead only calls this for a press
+  // and release that barely moved, so swinging the figure around never navigates;
+  // `navigating` additionally swallows a second tap during the ~1.2s scan-out.
+  const navigating = useRef(false);
+  const goAbout = useCallback(() => {
+    if (navigating.current) return;
+    navigating.current = true;
+    void headScan.playExitAll().then(() => router.push(ABOUT_HREF));
+  }, [headScan, router]);
 
   // Keep the nameplate hidden until the intro reveals the page, so the fade/rise
   // + scramble entrance plays IN VIEW rather than behind the preloader cover.
@@ -95,7 +108,7 @@ export function Hero({ hero }: { hero: HeroContent }) {
               normalized by its bounding sphere, so it only fills ~68% at zoom 1).
               Mounted only after the intro reveals — see showRobot above. */}
           {showRobot && (
-            <HeroHead shape="robot" zoom={0.95} scanOnReveal draggable />
+            <HeroHead shape="robot" zoom={0.95} scanOnReveal draggable onActivate={goAbout} />
           )}
         </div>
       </div>
