@@ -101,7 +101,9 @@ export function Tesseract() {
       const dummy = new THREE.Object3D();
       const color = new THREE.Color();
       const target = new THREE.Vector3();
-      const geometry = new THREE.ConeGeometry(0.1, 0.5, 4).rotateX(Math.PI / 2);
+      // Bigger cones than the source (0.1/0.5) → thicker-reading lines, and larger
+      // particles are steadier (cover more pixels) so they flicker less, not more.
+      const geometry = new THREE.ConeGeometry(0.26, 1.1, 4).rotateX(Math.PI / 2);
       const material = new THREE.MeshBasicMaterial({ color: 0xffffff }); // white (no blue tint)
       const mesh = new THREE.InstancedMesh(geometry, material, COUNT);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
