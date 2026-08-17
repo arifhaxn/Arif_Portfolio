@@ -51,7 +51,9 @@ export function SpaceTimeFabric() {
       );
       if (disposed) return;
 
-      const COUNT = tier === "high" ? SWARM_COUNT : Math.round(SWARM_COUNT * 0.6);
+      // A bit denser than the tesseract — this is a spread field, not edges.
+      const COUNT =
+        tier === "high" ? Math.round(SWARM_COUNT * 1.25) : Math.round(SWARM_COUNT * 0.8);
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const size = () => ({
         w: Math.max(1, container.clientWidth),
@@ -60,12 +62,13 @@ export function SpaceTimeFabric() {
       let { w, h } = size();
 
       // --- fabric params ---
-      const scale = 80; // half-extent of the fabric plane
+      const scale = 135; // half-extent of the fabric plane (wide enough to fill)
       const freq = 2.2; // wave frequency
       const amp = 6; // wave amplitude (depth ripple)
       const speed = 0.85; // flow speed
       const pull = 7; // gravity-well strength
       const twist = 1.3; // shear twist near the wells
+      const spin = 0.05; // slow constant rotation (rad/s) → extra dynamics
 
       const scene = new THREE.Scene();
       scene.fog = new THREE.FogExp2(0x000000, 0.006);
@@ -102,6 +105,7 @@ export function SpaceTimeFabric() {
       const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
       const mesh = new THREE.InstancedMesh(geometry, material, COUNT);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.rotation.x = 0.2; // slight tilt so the slow spin reads as 3D depth
       scene.add(mesh);
 
       // fixed scattered plane position per particle (hash), + persistent positions
@@ -127,7 +131,9 @@ export function SpaceTimeFabric() {
       const animated = !reduce;
 
       const renderFrame = (snap: boolean) => {
-        const time = (snap ? 0 : clock.getElapsedTime()) * speed;
+        const elapsed = snap ? 0 : clock.getElapsedTime();
+        mesh.rotation.z = elapsed * spin; // slow constant rotation
+        const time = elapsed * speed;
         // two wells drift on lazy Lissajous paths
         const w1x = Math.sin(time * 0.3) * scale * 0.4;
         const w1y = Math.cos(time * 0.2) * scale * 0.4;
