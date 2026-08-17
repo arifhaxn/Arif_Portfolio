@@ -8,12 +8,12 @@
 //     `marqueeRowFocus`: a scrubbed dim → bright → dim tween, so the row nearest
 //     the viewport center is white/full-opacity and everything else is gray —
 //     a gradual scrub (0.4), not an on/off switch.
-//   • The reused <HeroHead> wireframe polyhedron sits BEHIND the whole section
-//     as a large ambient background layer: a sticky, viewport-centered element
-//     (z-0, pointer-events-none, dimmed) under the text/cards (z-10). It zooms
-//     in (scale 0.6 → 1, fade to its resting opacity) once when the section
-//     enters, then mouse-tracking rotation keeps running on it. CSS sticky does
-//     the centering, so it can't interfere with the ScrollTrigger pin.
+//   • The <Tesseract> (a breathing 4D hypercube — replaced the old wireframe
+//     icosahedron) sits BEHIND the whole section as a large ambient background
+//     layer: a sticky, viewport-centered element (z-0, pointer-events-none,
+//     dimmed) under the text/cards (z-10). It zooms in (scale 0.6 → 1, fade to
+//     its resting opacity) once when the section enters. CSS sticky does the
+//     centering, so it can't interfere with the ScrollTrigger pin.
 //   • The right column is PINNED for the whole section (ScrollTrigger pin) and
 //     holds the stack of project cards (thumbnail + meta + GitHub link).
 //   • Per-row "active zone" triggers (callbacks only, no tween) track which row
@@ -43,8 +43,10 @@ import { ThumbnailCard } from "@/components/ThumbnailCard";
 import { ScrambleText } from "@/components/ScrambleText";
 import { externalHref } from "@/lib/url";
 
-const HeroHead = dynamic(
-  () => import("@/components/HeroHead").then((m) => m.HeroHead),
+// Ambient background centrepiece: the breathing 4D hypercube (replaces the old
+// wireframe icosahedron). Client-only (WebGL), loaded after layout settles.
+const Tesseract = dynamic(
+  () => import("@/components/Tesseract").then((m) => m.Tesseract),
   { ssr: false },
 );
 
@@ -230,7 +232,7 @@ export function Projects({ projects }: { projects: Project[] }) {
             {/* Slow idle auto-spin on the ambient centerpiece; mouse tilt still
                 tracks on top of it. Mounted after layout settles (bgReady) so the
                 canvas measures/centres correctly on first paint. */}
-            {bgReady && <HeroHead spin={0.12} scan />}
+            {bgReady && <Tesseract />}
           </div>
         </div>
       </div>
