@@ -68,7 +68,7 @@ export function SpaceTimeFabric() {
       const speed = 0.85; // flow speed
       const pull = 7; // gravity-well strength
       const twist = 1.3; // shear twist near the wells
-      const spin = 0.05; // slow constant rotation (rad/s) → extra dynamics
+      const spin = 0.12; // left→right rotation speed (rad/s) around the vertical axis
 
       const scene = new THREE.Scene();
       scene.fog = new THREE.FogExp2(0x000000, 0.006);
@@ -105,7 +105,6 @@ export function SpaceTimeFabric() {
       const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
       const mesh = new THREE.InstancedMesh(geometry, material, COUNT);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      mesh.rotation.x = 0.2; // slight tilt so the slow spin reads as 3D depth
       scene.add(mesh);
 
       // fixed scattered plane position per particle (hash), + persistent positions
@@ -132,7 +131,9 @@ export function SpaceTimeFabric() {
 
       const renderFrame = (snap: boolean) => {
         const elapsed = snap ? 0 : clock.getElapsedTime();
-        mesh.rotation.z = elapsed * spin; // slow constant rotation
+        // Rotate the whole plane around the VERTICAL axis (left→right), so it turns
+        // like a sheet and goes edge-on at the halfway point — as in the source.
+        mesh.rotation.y = elapsed * spin;
         const time = elapsed * speed;
         // two wells drift on lazy Lissajous paths
         const w1x = Math.sin(time * 0.3) * scale * 0.4;
