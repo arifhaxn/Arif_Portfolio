@@ -1,23 +1,26 @@
+"use client";
+
 // -----------------------------------------------------------------------------
 // AchievementCard
 // -----------------------------------------------------------------------------
-// One certificate cell. Renders the real certificate <Image> when set, else a
-// dark placeholder shell (ghost mono index + a blue accent line), with the title/
-// issuer label hidden until the cell is focused.
+// One certificate cell. The card TAKES THE CERTIFICATE'S OWN ASPECT RATIO (read
+// from the image once it loads) so the scan fills it edge-to-edge with no crop
+// and no letterbox — the card is the shape of the certificate. Until the image
+// loads (and for the no-image placeholder) it falls back to a 4:3 default. Cells
+// are all the same WIDTH (the grid column) but their height varies with each
+// certificate, so rows are intentionally ragged.
 //
-// The focus visual is a WHOLE-CARD zoom (scale-up + a brighter ring + label
-// reveal — no brightness glow), driven by the `focused` prop. It lives on THIS
-// element (not the parent cell) because the parent cell is what GSAP transforms
-// (intro/idle/pan), so the two never fight over the same `transform`.
+// The focus visual is a WHOLE-CARD zoom (scale-up + brighter ring + label
+// reveal), driven by `focused`. It lives on THIS element (not the parent cell)
+// because the parent cell is what GSAP transforms (intro/idle/pan), so the two
+// never fight over the same `transform`.
 //
-// IMPORTANT: the card is NOT clipped with `overflow-hidden`. Chrome drops a
-// border-radius overflow-clip when it composites a *scaled* element, which squares
-// off the corners on hover and makes the image look like it's the thing zooming.
-// Instead each visible piece rounds ITSELF (image, placeholder, label) — an
-// element's own border-radius scales cleanly under a transform, so the corners
-// stay round while the whole card zooms.
+// The card is NOT clipped with `overflow-hidden` (Chrome drops a border-radius
+// overflow-clip when it composites a scaled element, squaring the corners on
+// hover). Each visible piece rounds ITSELF instead.
 // -----------------------------------------------------------------------------
 
+import { useState } from "react";
 import Image from "next/image";
 import type { Achievement } from "@/lib/achievements";
 import { ScrambleText } from "@/components/ScrambleText";
@@ -29,37 +32,42 @@ export function AchievementCard({
   achievement: Achievement;
   focused?: boolean;
 }) {
+  // The card's aspect ratio = the certificate's, resolved from the loaded image.
+  const [aspect, setAspect] = useState(4 / 3);
+
   return (
     <div
-      className={`relative h-full w-full rounded-xl bg-zinc-950 ring-1 transition duration-300 ease-out will-change-transform ${
+      style={{ aspectRatio: achievement.image ? aspect : 4 / 3 }}
+      className={`relative w-full rounded-xl bg-zinc-950 ring-1 transition duration-300 ease-out will-change-transform ${
         focused ? "z-10 scale-[1.12] ring-white/50" : "scale-100 ring-white/10"
       }`}
     >
-      {/* --- Visual: real scan when available, else the placeholder shell --- */}
-      {/* object-contain: show the WHOLE certificate at its true proportions (no
-          crop); the card stays a fixed cell for the grid/pan, so off-aspect scans
-          just sit letterboxed on the dark card. */}
+      {/* Real scan when available, else the placeholder shell. object-cover fills
+          exactly because the card now matches the scan's aspect (no crop). */}
       {achievement.image ? (
         <Image
           src={achievement.image}
           alt={`${achievement.title} certificate`}
           fill
           sizes="(min-width: 1024px) 20rem, 45vw"
-          className="rounded-xl object-contain"
+          className="rounded-xl object-cover"
+          onLoad={(e) => {
+            const img = e.currentTarget;
+            if (img.naturalWidth && img.naturalHeight) {
+              setAspect(img.naturalWidth / img.naturalHeight);
+            }
+          }}
         />
       ) : (
         <div className="flex h-full w-full flex-col items-center justify-center gap-3 rounded-xl bg-gradient-to-br from-zinc-900 via-zinc-950 to-black">
-          {/* Ghost index — the card's only resting label. */}
           <span className="font-mono text-5xl font-semibold tracking-tight text-white/10">
             {achievement.id}
           </span>
-          {/* Blue accent detail, consistent with the site's link/pose accent. */}
           <span aria-hidden className="h-px w-10 bg-blue-500" />
         </div>
       )}
 
-      {/* --- Title / issuer label: revealed on focus (hover desktop / tap mobile).
-          rounded-b-xl so its bottom corners match the card now that nothing clips it. */}
+      {/* Title / issuer label: revealed on focus. */}
       <div
         className={`absolute inset-x-0 bottom-0 flex flex-col gap-0.5 rounded-b-xl bg-gradient-to-t from-black/90 via-black/60 to-transparent px-3 pb-3 pt-8 text-left transition-all duration-300 ${
           focused ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"

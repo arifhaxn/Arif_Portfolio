@@ -16,7 +16,6 @@
 // -----------------------------------------------------------------------------
 
 import { useEffect, useRef } from "react";
-import Image from "next/image";
 import {
   achievementModalIn,
   achievementModalOut,
@@ -94,32 +93,36 @@ export function AchievementModal({
         className="absolute inset-0 bg-black/35 backdrop-blur-xl"
       />
 
-      {/* Panel — a small card floating over the blurred screen. Stop propagation
-          so clicks inside don't dismiss. perspective is here so only the card
-          (its child) tilts in 3D — the caption row stays flat. */}
+      {/* Panel — a card floating over the blurred screen, sized to the
+          certificate itself (w-fit). Stop propagation so clicks inside don't
+          dismiss. perspective is here so only the card tilts in 3D. */}
       <div
         ref={panel}
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 w-full max-w-2xl will-change-transform [perspective:1200px]"
+        className="relative z-10 w-fit max-w-[92vw] will-change-transform [perspective:1200px]"
       >
         {/* Certificate image (or enlarged placeholder), with the pixel-block
-            dissolve overlay on top. overflow-hidden clips tiles to the rounding.
-            This card is the only element that mouse-tilts. */}
+            dissolve overlay on top. The card takes the scan's OWN aspect ratio
+            (no crop, no letterbox), capped to the viewport. overflow-hidden clips
+            tiles to the rounding. This card is the only element that mouse-tilts. */}
         <div
           ref={card}
-          className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-gradient-to-br from-zinc-900 via-zinc-950 to-black ring-1 ring-white/15 will-change-transform"
+          className="relative w-fit overflow-hidden rounded-xl bg-zinc-950 ring-1 ring-white/15 will-change-transform"
         >
           {achievement.image ? (
-            <Image
+            // Plain img so the card sizes to the certificate's natural aspect
+            // (capped to fit the viewport). eslint-disable — this is a full-size
+            // lightbox where next/image's fixed frame doesn't fit the goal.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
               src={achievement.image}
               alt={`${achievement.title} certificate`}
-              fill
-              sizes="(min-width: 768px) 32rem, 90vw"
-              className="object-contain"
-              priority
+              loading="eager"
+              className="block h-auto max-h-[82vh] w-auto rounded-xl"
+              style={{ maxWidth: "min(92vw, 44rem)" }}
             />
           ) : (
-            <div className="flex h-full w-full flex-col items-center justify-center gap-4">
+            <div className="flex aspect-[4/3] w-[min(92vw,44rem)] flex-col items-center justify-center gap-4">
               <span className="font-mono text-8xl font-semibold tracking-tight text-white/10">
                 {achievement.id}
               </span>

@@ -46,8 +46,7 @@ const SpaceTimeFabric = dynamic(
 // vertically, the whole board is larger than the viewport (that overflow is the
 // pan range).
 const COLS = 4;
-const CARD_W = 300;
-const CARD_H = 220;
+const CARD_W = 300; // fixed column WIDTH; each card's height follows its scan
 
 export function AchievementsView({ content }: { content: AchievementsContent }) {
   const root = useRef<HTMLElement>(null);
@@ -174,7 +173,7 @@ export function AchievementsView({ content }: { content: AchievementsContent }) 
                   </span>
                 </p>
                 <div
-                  className="grid gap-x-24 gap-y-24"
+                  className="grid items-start gap-x-24 gap-y-24"
                   style={{ gridTemplateColumns: `repeat(${COLS}, ${CARD_W}px)` }}
                 >
                   {items.map((a) => {
@@ -187,7 +186,7 @@ export function AchievementsView({ content }: { content: AchievementsContent }) 
                       <div
                         key={cellKey}
                         data-cell
-                        style={{ width: CARD_W, height: CARD_H }}
+                        style={{ width: CARD_W }}
                         className="will-change-transform"
                         onMouseEnter={() => focus(cellKey)}
                         onMouseLeave={() => focus(null)}
@@ -279,12 +278,11 @@ export function AchievementsView({ content }: { content: AchievementsContent }) 
                 {String(items.length).padStart(2, "0")}
               </span>
             </p>
-            <div className="mt-4 grid grid-cols-2 gap-4">
+            <div className="mt-4 grid grid-cols-2 items-start gap-4">
               {items.map((a) => (
                 <div
                   key={`${category}::${a.id}`}
                   data-mobile-card
-                  className="h-44"
                   onClick={() => setSelected(a)}
                 >
                   <AchievementCard
