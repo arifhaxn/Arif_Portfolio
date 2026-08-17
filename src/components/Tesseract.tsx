@@ -101,9 +101,7 @@ export function Tesseract() {
       const dummy = new THREE.Object3D();
       const color = new THREE.Color();
       const target = new THREE.Vector3();
-      // Bigger cones than the source (0.1/0.5) → thicker-reading lines, and larger
-      // particles are steadier (cover more pixels) so they flicker less, not more.
-      const geometry = new THREE.ConeGeometry(0.26, 1.1, 4).rotateX(Math.PI / 2);
+      const geometry = new THREE.ConeGeometry(0.1, 0.5, 4).rotateX(Math.PI / 2);
       const material = new THREE.MeshBasicMaterial({ color: 0xffffff }); // white (no blue tint)
       const mesh = new THREE.InstancedMesh(geometry, material, COUNT);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -126,7 +124,11 @@ export function Tesseract() {
       const rotSpeed = 0.8;
       const breathSpeed = 1.2;
       const scale = 54; // slightly larger projection
-      const fuzz = 0.07; // less per-frame jitter → smoother, less shimmer/flicker
+      // fuzz spreads particles sideways off each edge → this is the LINE THICKNESS.
+      // Keep it wide for thick bands, but drift it slowly (fuzzTime) so the band
+      // doesn't shimmer/flicker.
+      const fuzz = 0.16;
+      const fuzzTime = 0.18;
       const clock = new THREE.Clock();
       const animated = !reduce;
 
@@ -171,9 +173,10 @@ export function Tesseract() {
           const Z_f = z_1;
           const W_f = w_1;
 
-          const pX = X_f + Math.sin(i * 1.3 + time) * fuzz;
-          const pY = Y_f + Math.cos(i * 1.7 - time) * fuzz;
-          const pZ = Z_f + Math.sin(i * 2.1 + time * 1.2) * fuzz;
+          const ft = time * fuzzTime; // slow drift → thick band without flicker
+          const pX = X_f + Math.sin(i * 1.3 + ft) * fuzz;
+          const pY = Y_f + Math.cos(i * 1.7 - ft) * fuzz;
+          const pZ = Z_f + Math.sin(i * 2.1 + ft) * fuzz;
 
           const wFactor = 1.0 / (4.0 - W_f + 0.0001);
           target.set(pX * wFactor * scale, pY * wFactor * scale, pZ * wFactor * scale);
