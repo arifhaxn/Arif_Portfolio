@@ -122,7 +122,7 @@ export function Navbar({ nav }: { nav: NavbarContent }) {
               data-nav-item
               href={link.href}
               onClick={(e) => handleNav(e, link.href)}
-              className="text-xs font-medium uppercase tracking-[0.15em] text-zinc-400 transition-colors hover:text-white sm:text-sm"
+              className="text-xs font-medium uppercase tracking-[0.15em] text-white sm:text-sm"
             >
               {/* Entrance driven by navIntro (data-nav-item); hover replays. */}
               <ScrambleText>{link.label}</ScrambleText>
@@ -158,7 +158,7 @@ export function Navbar({ nav }: { nav: NavbarContent }) {
               data-nav-item
               href={link.href}
               onClick={(e) => handleNav(e, link.href)}
-              className="text-xs font-medium uppercase tracking-[0.15em] text-zinc-400 transition-colors hover:text-white sm:text-sm"
+              className="text-xs font-medium uppercase tracking-[0.15em] text-white sm:text-sm"
             >
               {/* Entrance driven by navIntro (data-nav-item); hover replays. */}
               <ScrambleText>{link.label}</ScrambleText>
