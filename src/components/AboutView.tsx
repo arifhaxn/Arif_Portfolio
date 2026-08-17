@@ -30,6 +30,7 @@ import {
 import { ScrambleText } from "@/components/ScrambleText";
 import { Career } from "@/components/Career";
 import { SkillsConstellation } from "@/components/SkillsConstellation";
+import { SpaceTimeFabric } from "@/components/SpaceTimeFabric";
 import { HalftonePortrait } from "@/components/HalftonePortrait";
 import { HeroStatus } from "@/components/HeroStatus";
 import { CodingSince } from "@/components/Hud";
@@ -339,9 +340,11 @@ export function AboutView({
       {/* Full-viewport: always fills the screen regardless of content length. */}
       <section
         id="contact"
-        className="relative flex min-h-screen scroll-mt-24 flex-col justify-center border-t border-white/5 px-6 py-24 sm:px-10"
+        className="relative flex min-h-screen scroll-mt-24 flex-col justify-center overflow-hidden border-t border-white/5 px-6 py-24 sm:px-10"
       >
-        <div className="mx-auto w-full max-w-6xl">
+        {/* Ambient gravity-well fabric behind the contact copy (tier-gated). */}
+        <SpaceTimeFabric />
+        <div className="relative z-10 mx-auto w-full max-w-6xl">
           {/* labels */}
           <div className="flex items-center justify-between font-mono text-xs uppercase tracking-[0.3em] text-blue-400">
             <span>{footer.eyebrow}</span>
