@@ -15,7 +15,8 @@
 // locked while open (matters on the mobile layout, which scrolls).
 // -----------------------------------------------------------------------------
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import {
   achievementModalIn,
   achievementModalOut,
@@ -40,6 +41,28 @@ export function AchievementModal({
   const backdrop = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const card = useRef<HTMLDivElement>(null);
+
+  // The card sizes to the certificate's aspect, capped to the viewport — computed
+  // in JS so a portrait scan can't overflow the screen. Uses next/image (fast,
+  // optimized, preloaded) rather than the full-size original.
+  const [box, setBox] = useState<{ w: number; h: number } | null>(null);
+  const aspectRef = useRef(4 / 3);
+  const fitBox = (aspect: number) => {
+    const maxW = Math.min(window.innerWidth * 0.92, 704); // 44rem
+    const maxH = window.innerHeight * 0.82;
+    let w = maxW;
+    let h = maxW / aspect;
+    if (h > maxH) {
+      h = maxH;
+      w = maxH * aspect;
+    }
+    return { w: Math.round(w), h: Math.round(h) };
+  };
+  useEffect(() => {
+    const onResize = () => setBox(fitBox(aspectRef.current));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   // Play the close animation, then let the parent unmount us.
   const close = () => achievementModalOut(backdrop.current!, panel.current!, onClose);
@@ -107,22 +130,33 @@ export function AchievementModal({
             tiles to the rounding. This card is the only element that mouse-tilts. */}
         <div
           ref={card}
-          className="relative w-fit overflow-hidden rounded-xl bg-zinc-950 ring-1 ring-white/15 will-change-transform"
+          style={
+            box
+              ? { width: box.w, height: box.h }
+              : { width: "min(92vw, 44rem)", aspectRatio: "4 / 3" }
+          }
+          className="relative overflow-hidden rounded-xl bg-zinc-950 ring-1 ring-white/15 will-change-transform"
         >
           {achievement.image ? (
-            // Plain img so the card sizes to the certificate's natural aspect
-            // (capped to fit the viewport). eslint-disable — this is a full-size
-            // lightbox where next/image's fixed frame doesn't fit the goal.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            // next/image (optimized + preloaded) so it appears fast; the card is
+            // sized to the scan's aspect, so object-cover fills without cropping.
+            <Image
               src={achievement.image}
               alt={`${achievement.title} certificate`}
-              loading="eager"
-              className="block h-auto max-h-[82vh] w-auto rounded-xl"
-              style={{ maxWidth: "min(92vw, 44rem)" }}
+              fill
+              sizes="(min-width: 768px) 44rem, 92vw"
+              className="object-cover"
+              priority
+              onLoad={(e) => {
+                const im = e.currentTarget;
+                if (im.naturalWidth && im.naturalHeight) {
+                  aspectRef.current = im.naturalWidth / im.naturalHeight;
+                  setBox(fitBox(aspectRef.current));
+                }
+              }}
             />
           ) : (
-            <div className="flex aspect-[4/3] w-[min(92vw,44rem)] flex-col items-center justify-center gap-4">
+            <div className="flex h-full w-full flex-col items-center justify-center gap-4">
               <span className="font-mono text-8xl font-semibold tracking-tight text-white/10">
                 {achievement.id}
               </span>
