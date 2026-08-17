@@ -20,6 +20,7 @@
 // -----------------------------------------------------------------------------
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import dynamic from "next/dynamic";
 import { gsap, useGSAP } from "@/lib/gsap";
 import {
   achievementsGridIntro,
@@ -33,6 +34,12 @@ import { AchievementCard } from "@/components/AchievementCard";
 import { AchievementModal } from "@/components/AchievementModal";
 import { ScrambleText } from "@/components/ScrambleText";
 import type { AchievementsContent } from "@/lib/content-types";
+
+// Ambient 4D-hypercube backdrop behind the certificate board. Client-only (WebGL).
+const Tesseract = dynamic(
+  () => import("@/components/Tesseract").then((m) => m.Tesseract),
+  { ssr: false },
+);
 
 // Card geometry — kept at the original compact size/spacing. All sections use
 // the same column count so their grids left-align to a consistent width; stacked
@@ -140,11 +147,18 @@ export function AchievementsView({ content }: { content: AchievementsContent }) 
       ref={root}
       className="relative min-h-screen bg-black text-white lg:h-screen lg:overflow-hidden"
     >
+      {/* Ambient breathing-hypercube backdrop, fixed behind the pannable board
+          (the cards pan over it). Desktop only, dimmed so it doesn't fight the
+          cards; tier-gated + off-screen-paused inside the component. */}
+      <div className="pointer-events-none absolute inset-0 z-0 hidden opacity-55 lg:block">
+        <Tesseract />
+      </div>
+
       {/* ===================== Desktop: pannable section board ============== */}
       <div
         ref={panViewport}
         // select-none: dragging to pan must not also select/highlight card text.
-        className="absolute inset-0 z-0 hidden cursor-grab touch-none select-none overflow-hidden active:cursor-grabbing lg:block"
+        className="absolute inset-0 z-10 hidden cursor-grab touch-none select-none overflow-hidden active:cursor-grabbing lg:block"
       >
         <div ref={grid} className="absolute left-1/2 top-1/2 will-change-transform">
           {/* pt-16 reserves clear space above the first section so that when the

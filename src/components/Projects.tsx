@@ -8,12 +8,12 @@
 //     `marqueeRowFocus`: a scrubbed dim → bright → dim tween, so the row nearest
 //     the viewport center is white/full-opacity and everything else is gray —
 //     a gradual scrub (0.4), not an on/off switch.
-//   • The <Tesseract> (a breathing 4D hypercube — replaced the old wireframe
-//     icosahedron) sits BEHIND the whole section as a large ambient background
-//     layer: a sticky, viewport-centered element (z-0, pointer-events-none,
-//     dimmed) under the text/cards (z-10). It zooms in (scale 0.6 → 1, fade to
-//     its resting opacity) once when the section enters. CSS sticky does the
-//     centering, so it can't interfere with the ScrollTrigger pin.
+//   • The reused <HeroHead> wireframe polyhedron sits BEHIND the whole section
+//     as a large ambient background layer: a sticky, viewport-centered element
+//     (z-0, pointer-events-none, dimmed) under the text/cards (z-10). It zooms
+//     in (scale 0.6 → 1, fade to its resting opacity) once when the section
+//     enters, then mouse-tracking rotation keeps running on it. CSS sticky does
+//     the centering, so it can't interfere with the ScrollTrigger pin.
 //   • The right column is PINNED for the whole section (ScrollTrigger pin) and
 //     holds the stack of project cards (thumbnail + meta + GitHub link).
 //   • Per-row "active zone" triggers (callbacks only, no tween) track which row
@@ -43,10 +43,10 @@ import { ThumbnailCard } from "@/components/ThumbnailCard";
 import { ScrambleText } from "@/components/ScrambleText";
 import { externalHref } from "@/lib/url";
 
-// Ambient background centrepiece: the breathing 4D hypercube (replaces the old
-// wireframe icosahedron). Client-only (WebGL), loaded after layout settles.
-const Tesseract = dynamic(
-  () => import("@/components/Tesseract").then((m) => m.Tesseract),
+// Ambient background centrepiece: the wireframe icosahedron. Client-only (WebGL),
+// loaded after layout settles.
+const HeroHead = dynamic(
+  () => import("@/components/HeroHead").then((m) => m.HeroHead),
   { ssr: false },
 );
 
@@ -227,14 +227,12 @@ export function Projects({ projects }: { projects: Project[] }) {
         <div className="sticky top-0 flex h-screen items-center justify-center">
           <div
             ref={bgShape}
-            // Widescreen-ish box (the hypercube's projection arms reach wider than
-            // the old square could hold) so the swarm fits at the source's z=100
-            // instead of clipping left/right.
-            className="relative aspect-[3/2] w-[clamp(36rem,62vw,66rem)] opacity-0"
+            className="relative aspect-square w-[clamp(24rem,42vw,34rem)] opacity-0"
           >
-            {/* The swarm auto-rotates on its own; mounted after layout settles
-                (bgReady) so the canvas measures/centres correctly on first paint. */}
-            {bgReady && <Tesseract />}
+            {/* Slow idle auto-spin on the ambient centerpiece; mouse tilt still
+                tracks on top of it. Mounted after layout settles (bgReady) so the
+                canvas measures/centres correctly on first paint. */}
+            {bgReady && <HeroHead spin={0.12} scan />}
           </div>
         </div>
       </div>
