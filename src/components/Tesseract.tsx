@@ -1,30 +1,28 @@
 "use client";
 
 // -----------------------------------------------------------------------------
-// Tesseract — a breathing 4D hypercube, traced by glowing points
+// Tesseract — a breathing 4D hypercube, traced by sharp instanced particles
 // -----------------------------------------------------------------------------
-// Site-native, optimized reworking of the pasted dubolt.js sandbox export (a
-// "Breathing Tesseract": a 4D hypercube stereographically projected into 3D).
-// The original looped 20,000 instanced spheres in JS + UnrealBloom every frame,
-// full-window and rainbow-hued. This traces the cube's 32 edges with GL points
-// and does ALL the 4D rotation + breathing + projection in the vertex shader
-// (each point carries its 4D base coordinate in an `a4` attribute), recolored to
-// the site's single blue.
+// Site-native, optimized reworking of the pasted dubolt sandbox export (a
+// "Breathing Tesseract": a 4-cube stereographically projected into 3D). The
+// particles are REAL geometry — small solid octahedra drawn with an instanced
+// mesh — so they stay crisp at any zoom (unlike fixed-pixel point sprites, which
+// look soft and blur when scaled). The original looped 20k instances in JS every
+// frame; here every instance's 4D rotation + breathing + projection runs in the
+// vertex shader (each instance carries its 4D base coordinate in the `instanceA4`
+// attribute), so it's cheap AND sharp. Recolored to the site's single blue,
+// antialiased, depth-sorted.
 //
-// It replaces the wireframe icosahedron behind the Projects section, so it obeys
-// the same conventions as the rest of the 3D here:
-//   • Device tier (lib/quality): renders on mid/high only; low tier / reduced
-//     motion skip it (it's an ambient backdrop, never load-bearing).
-//   • The render loop stops when the wrapper scrolls out of view.
-//   • dpr-capped, additive points, no bloom pass. Fills its container.
+// Replaces the wireframe icosahedron behind the Projects section; obeys the same
+// conventions as the rest of the 3D here: tier-gated (mid/high only; low tier +
+// reduced motion skip it), render loop stops off-screen, dpr-capped.
 // -----------------------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import {
-  AdditiveBlending,
-  BufferAttribute,
-  BufferGeometry,
+  InstancedBufferAttribute,
+  OctahedronGeometry,
   ShaderMaterial,
 } from "three";
 import { prefersReducedMotion } from "@/lib/animations";
@@ -36,14 +34,14 @@ const VERT = /* glsl */ `
   uniform float uBreath;
   uniform float uFuzz;
   uniform float uScale;
-  uniform float uSize;
-  attribute vec4 a4;      // the point's base coordinate on the tesseract, in 4D
-  attribute float aPhase; // per-point phase for breath + chaos
+  uniform float uPScale;      // particle (octahedron) size in world units
+  attribute vec4 instanceA4;  // this instance's base coordinate on the 4-cube
+  attribute float instancePhase;
   varying float vDepth;
   void main() {
-    vec4 p = a4;
+    vec4 p = instanceA4;
     // breathing pulse
-    p *= 1.0 + 0.3 * sin(uTime * uBreath + aPhase * 0.0001);
+    p *= 1.0 + 0.3 * sin(uTime * uBreath + instancePhase * 0.0001);
     // three 4D rotation planes (xw, yz, xy), incommensurate speeds
     float a1 = uTime * uRot;         float c1 = cos(a1), s1 = sin(a1);
     float x1 = p.x * c1 - p.w * s1;  float w1 = p.x * s1 + p.w * c1;
@@ -53,46 +51,41 @@ const VERT = /* glsl */ `
     float Xf = x1 * c3 - y1 * s3;    float Yf = x1 * s3 + y1 * c3;
     float Zf = z1;                   float Wf = w1;
     // a touch of chaos so the edges shimmer
-    Xf += sin(aPhase * 1.3 + uTime) * uFuzz;
-    Yf += cos(aPhase * 1.7 - uTime) * uFuzz;
-    Zf += sin(aPhase * 2.1 + uTime * 1.2) * uFuzz;
-    // stereographic projection 4D -> 3D
+    Xf += sin(instancePhase * 1.3 + uTime) * uFuzz;
+    Yf += cos(instancePhase * 1.7 - uTime) * uFuzz;
+    Zf += sin(instancePhase * 2.1 + uTime * 1.2) * uFuzz;
+    // stereographic projection 4D -> 3D → this instance's centre
     float wf = 1.0 / (4.0 - Wf + 0.0001);
-    vec3 pos = vec3(Xf, Yf, Zf) * wf * uScale;
+    vec3 centre = vec3(Xf, Yf, Zf) * wf * uScale;
     vDepth = wf; // nearer in w = brighter
-    vec4 mv = modelViewMatrix * vec4(pos, 1.0);
-    gl_Position = projectionMatrix * mv;
-    gl_PointSize = uSize * (300.0 / max(-mv.z, 1.0));
+    // place the octahedron's local vertex around the projected centre
+    vec3 world = centre + position * uPScale;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(world, 1.0);
   }
 `;
 
 const FRAG = /* glsl */ `
   precision mediump float;
-  uniform float uOpacity;
   varying float vDepth;
   void main() {
-    vec2 cc = gl_PointCoord - 0.5;
-    float d = length(cc);
-    if (d > 0.5) discard;
-    float soft = smoothstep(0.5, 0.0, d);
-    float e = clamp((vDepth - 0.16) * 2.6, 0.0, 1.0); // normalize the w-factor
-    vec3 col = mix(vec3(0.231, 0.51, 0.965) * 0.6, vec3(0.82, 0.9, 1.0), e); // blue -> white
-    gl_FragColor = vec4(col, soft * uOpacity * (0.32 + e * 0.68));
+    float e = clamp((vDepth - 0.16) * 2.6, 0.0, 1.0); // normalise the w-factor
+    vec3 col = mix(vec3(0.231, 0.51, 0.965) * 0.75, vec3(0.85, 0.92, 1.0), e); // blue -> white
+    gl_FragColor = vec4(col, 1.0);
   }
 `;
 
-/** Points spread evenly along the 32 edges of a 4-cube, each tagged with its 4D
- *  base coordinate (the shader does the rotation/projection). */
-function buildTesseract(count: number): BufferGeometry {
+/** Per-instance 4D base coordinates: points spread along the 32 edges of a
+ *  4-cube (the shader does the rotation/projection). */
+function buildInstances(count: number) {
   const EDGES = 32;
   const per = Math.max(1, Math.floor(count / EDGES));
   const total = per * EDGES;
   const a4 = new Float32Array(total * 4);
-  const aPhase = new Float32Array(total);
+  const phase = new Float32Array(total);
   let k = 0;
   for (let e = 0; e < EDGES; e++) {
     const axis = e % 4; // which of the 4 coords varies along this edge
-    const fb = Math.floor(e / 4); // the fixed ± signs of the other three
+    const fb = Math.floor(e / 4); // fixed ± signs of the other three
     const b1 = fb & 1 ? 1 : -1;
     const b2 = fb & 2 ? 1 : -1;
     const b3 = fb & 4 ? 1 : -1;
@@ -107,21 +100,22 @@ function buildTesseract(count: number): BufferGeometry {
       a4[k * 4 + 1] = y;
       a4[k * 4 + 2] = z;
       a4[k * 4 + 3] = w;
-      aPhase[k] = k;
+      phase[k] = k;
       k++;
     }
   }
-  const g = new BufferGeometry();
-  // `position` is required by three's point draw (count); the real coord is a4.
-  g.setAttribute("position", new BufferAttribute(new Float32Array(total * 3), 3));
-  g.setAttribute("a4", new BufferAttribute(a4, 4));
-  g.setAttribute("aPhase", new BufferAttribute(aPhase, 1));
-  return g;
+  return { a4, phase, total };
 }
 
-function TesseractPoints({ count }: { count: number }) {
+function TesseractMesh({ count }: { count: number }) {
   const matRef = useRef<ShaderMaterial>(null);
-  const geometry = useMemo(() => buildTesseract(count), [count]);
+  const { geometry, total } = useMemo(() => {
+    const { a4, phase, total } = buildInstances(count);
+    const g = new OctahedronGeometry(1, 0); // crisp little diamonds
+    g.setAttribute("instanceA4", new InstancedBufferAttribute(a4, 4));
+    g.setAttribute("instancePhase", new InstancedBufferAttribute(phase, 1));
+    return { geometry: g, total };
+  }, [count]);
   useEffect(() => () => geometry.dispose(), [geometry]);
 
   const uniforms = useMemo(
@@ -131,8 +125,7 @@ function TesseractPoints({ count }: { count: number }) {
       uBreath: { value: 1.2 },
       uFuzz: { value: 0.06 },
       uScale: { value: 42 },
-      uSize: { value: 2.2 },
-      uOpacity: { value: 0.95 },
+      uPScale: { value: 0.42 },
     }),
     [],
   );
@@ -143,17 +136,16 @@ function TesseractPoints({ count }: { count: number }) {
   });
 
   return (
-    <points geometry={geometry}>
+    // frustumCulled off: the shader displaces vertices far from the geometry's
+    // origin bounds, so three's culling can't see where they actually land.
+    <instancedMesh args={[geometry, undefined, total]} frustumCulled={false}>
       <shaderMaterial
         ref={matRef}
-        transparent
-        depthWrite={false}
-        blending={AdditiveBlending}
         uniforms={uniforms}
         vertexShader={VERT}
         fragmentShader={FRAG}
       />
-    </points>
+    </instancedMesh>
   );
 }
 
@@ -184,11 +176,11 @@ export function Tesseract() {
       {show && (
         <Canvas
           frameloop={inView ? "always" : "never"}
-          dpr={[1, high ? 2 : 1.5]}
+          dpr={[1, 2]} // full pixel ratio → sharp geometry, no upscale blur
           camera={{ position: [0, 0, 60], fov: 55 }}
-          gl={{ antialias: false, alpha: true, powerPreference: "high-performance" }}
+          gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
         >
-          <TesseractPoints count={count} />
+          <TesseractMesh count={count} />
         </Canvas>
       )}
     </div>
