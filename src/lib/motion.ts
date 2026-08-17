@@ -59,7 +59,7 @@ export const BG_SHAPE_OPACITY = 0.45;
  *  per-frame 4D rotation + stereographic projection runs on the CPU per particle,
  *  so keep it modest (source uses 20k; behind the pinned marquee that's too much).
  *  This is the HIGH-tier count; mid tier renders ~60% of it. */
-export const SWARM_COUNT = 8000;
+export const SWARM_COUNT = 12000;
 
 /**
  * Achievements grid — pan/warp + idle-drift tuning. Kept together so the whole

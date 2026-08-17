@@ -73,7 +73,9 @@ export function Tesseract() {
       const scene = new THREE.Scene();
       scene.fog = new THREE.FogExp2(0x000000, 0.01);
       const camera = new THREE.PerspectiveCamera(60, w / h, 0.1, 2000);
-      camera.position.set(0, 0, 80); // closer than the source's 100 → bigger in frame
+      // Pulled back for the big full-viewport backdrop so the swarm is smaller and
+      // DENSER on screen — a big, spread-out swarm reads soft/blurry.
+      camera.position.set(0, 0, 108);
 
       const renderer = new THREE.WebGLRenderer({
         antialias: true,
@@ -93,7 +95,7 @@ export function Tesseract() {
       composer.addPass(new RenderPass(scene, camera));
       const bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 1.5, 0.4, 0.85);
       bloom.strength = 1.35; // softer glow (was running hot)
-      bloom.radius = 0.4;
+      bloom.radius = 0.32; // tighter halo → crisper, less "blurry cloud"
       bloom.threshold = 0.05; // let the dimmest particles NOT bloom → less flicker
       composer.addPass(bloom);
 
