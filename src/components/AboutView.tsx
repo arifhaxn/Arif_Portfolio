@@ -380,9 +380,9 @@ export function AboutView({
 
           {/* Four brand tiles — span the FULL width in equal columns (2×2 on
               narrow viewports). Icon path + label come from content/footer (CMS).
-              Resting: black with a soft grey border (matching the site's card
-              rings); hover brightens the border, reveals the card gradient, and
-              lifts slightly (reduced-motion safe). */}
+              Resting: TRANSPARENT (the tesseract shows through) with a soft grey
+              border; hover fills the card black (the gradient wash below), brightens
+              the border, and lifts slightly (reduced-motion safe). */}
           <div className="mt-16 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
             {footer.socialLinks.map((s) => (
               <a
@@ -391,7 +391,7 @@ export function AboutView({
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label={s.label}
-                className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-white/15 bg-black px-4 py-7 transition-[scale,border-color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] hover:border-blue-500 motion-safe:hover:scale-[1.06]"
+                className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border border-white/15 bg-transparent px-4 py-7 transition-[scale,border-color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] hover:border-blue-500 motion-safe:hover:scale-[1.06]"
               >
                 {/* Gradient wash on its own rounded layer (no overflow clip, so the
                     zoom can't square the corners) — fades in smoothly on hover. */}
