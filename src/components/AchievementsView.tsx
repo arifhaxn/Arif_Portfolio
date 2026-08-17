@@ -35,9 +35,9 @@ import { AchievementModal } from "@/components/AchievementModal";
 import { ScrambleText } from "@/components/ScrambleText";
 import type { AchievementsContent } from "@/lib/content-types";
 
-// Ambient 4D-hypercube backdrop behind the certificate board. Client-only (WebGL).
-const Tesseract = dynamic(
-  () => import("@/components/Tesseract").then((m) => m.Tesseract),
+// Ambient space-time-fabric backdrop behind the certificate board. Client-only (WebGL).
+const SpaceTimeFabric = dynamic(
+  () => import("@/components/SpaceTimeFabric").then((m) => m.SpaceTimeFabric),
   { ssr: false },
 );
 
@@ -147,11 +147,11 @@ export function AchievementsView({ content }: { content: AchievementsContent }) 
       ref={root}
       className="relative min-h-screen bg-black text-white lg:h-screen lg:overflow-hidden"
     >
-      {/* Ambient breathing-hypercube backdrop, fixed behind the pannable board
+      {/* Ambient space-time-fabric backdrop, fixed behind the pannable board
           (the cards pan over it). Desktop only, dimmed so it doesn't fight the
           cards; tier-gated + off-screen-paused inside the component. */}
       <div className="pointer-events-none absolute inset-0 z-0 hidden opacity-55 lg:block">
-        <Tesseract />
+        <SpaceTimeFabric />
       </div>
 
       {/* ===================== Desktop: pannable section board ============== */}

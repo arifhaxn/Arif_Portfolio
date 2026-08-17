@@ -30,7 +30,7 @@ import {
 import { ScrambleText } from "@/components/ScrambleText";
 import { Career } from "@/components/Career";
 import { SkillsConstellation } from "@/components/SkillsConstellation";
-import { SpaceTimeFabric } from "@/components/SpaceTimeFabric";
+import { Tesseract } from "@/components/Tesseract";
 import { HalftonePortrait } from "@/components/HalftonePortrait";
 import { HeroStatus } from "@/components/HeroStatus";
 import { CodingSince } from "@/components/Hud";
@@ -342,8 +342,12 @@ export function AboutView({
         id="contact"
         className="relative flex min-h-screen scroll-mt-24 flex-col justify-center overflow-hidden border-t border-white/5 px-6 py-24 sm:px-10"
       >
-        {/* Ambient gravity-well fabric behind the contact copy (tier-gated). */}
-        <SpaceTimeFabric />
+        {/* Ambient breathing-hypercube behind the contact copy (tier-gated). */}
+        <div className="pointer-events-none absolute inset-0 z-0 opacity-45">
+          <Tesseract />
+        </div>
+        {/* Soft center vignette so the contact copy stays legible over it. */}
+        <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_center,rgba(0,0,0,0.72)_0%,rgba(0,0,0,0.35)_45%,transparent_75%)]" />
         <div className="relative z-10 mx-auto w-full max-w-6xl">
           {/* labels */}
           <div className="flex items-center justify-between font-mono text-xs uppercase tracking-[0.3em] text-blue-400">

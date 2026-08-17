@@ -1,198 +1,241 @@
 "use client";
 
 // -----------------------------------------------------------------------------
-// SpaceTimeFabric — ambient "gravity-well fabric" background
+// SpaceTimeFabric — a rippling "sheet of space" bent by moving gravity wells
 // -----------------------------------------------------------------------------
-// A site-native, optimized reworking of the pasted space_time_fabric.js sandbox
-// export. That original ran a 20,000-cone JS loop + UnrealBloom every frame and
-// was full-window, unthemed, and not adaptive. This keeps the IDEA — a grid of
-// points forming a sheet of space that ripples and dents around two slowly
-// drifting gravity wells, with a frame-dragging twist — but does ALL the
-// deformation on the GPU in the vertex shader (no per-point JS loop), recolors it
-// to the site's single blue, and behaves like the rest of the 3D here:
-//   • Device tier (see lib/quality): the effect only renders on mid/high tiers
-//     with motion allowed; low tier / reduced motion / phones skip it entirely
-//     (it's ambient, never load-bearing).
-//   • The render loop stops when the section scrolls out of view (frameloop
-//     "never" via IntersectionObserver), like HeroHead.
-//   • Additive points + a soft center vignette keep it a quiet backdrop that the
-//     contact copy still reads cleanly over — no bloom pass.
-// Rendered as an absolute, pointer-events-none layer behind a section's content.
+// Same crisp/smooth pipeline as <Tesseract> (that's the "tweaks" this shares):
+// vanilla three, particles are REAL instanced cones (not soft point sprites, so
+// they stay sharp), UnrealBloom for the glow, FogExp2 for depth, and a persistent
+// positions array lerped toward each target every frame for a fluid, trailing
+// feel. Recoloured to the site's white; tier-gated (mid/high only; low tier +
+// reduced motion skip / freeze it), the loop stops off-screen, dpr-capped,
+// container-sized, disposed on unmount.
+//
+// The PARTICLE MATH is the space-time fabric (ported from the sandbox export):
+// each particle sits at a fixed scattered spot on a large plane; a travelling
+// sine wave ripples it in depth, two slowly-drifting gravity wells bend the sheet
+// toward them, and a shear twist near the wells drags the plane (frame-dragging).
+// Drop it in a sized container (fills h/w); place behind content at a low opacity.
 // -----------------------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import {
-  AdditiveBlending,
-  BufferAttribute,
-  BufferGeometry,
-  ShaderMaterial,
-  Vector2,
-} from "three";
 import { prefersReducedMotion } from "@/lib/animations";
 import { detectQualityTier, type QualityTier } from "@/lib/quality";
+import { SWARM_COUNT } from "@/lib/motion";
 
-const SCALE = 60; // half-extent of the fabric plane in world units
-
-const VERT = /* glsl */ `
-  uniform float uTime;
-  uniform float uAmp;
-  uniform float uFreq;
-  uniform float uPull;
-  uniform float uTwist;
-  uniform float uSize;
-  uniform vec2 uWellA;
-  uniform vec2 uWellB;
-  varying float vDepth;
-  void main() {
-    vec3 p = position;            // x,y on the flat grid, z = 0
-    float t = uTime;
-    // travelling space-time ripples
-    float wave = sin(p.x * uFreq + t) + sin(p.y * uFreq - t * 0.8);
-    float z = wave * uAmp;
-    // two moving gravity wells bend the fabric (softened distance)
-    float dA = sqrt(dot(p.xy - uWellA, p.xy - uWellA) + 4.0);
-    float dB = sqrt(dot(p.xy - uWellB, p.xy - uWellB) + 4.0);
-    float bendA = -uPull / dA;
-    float bendB = -uPull / dB;
-    z += bendA + bendB;
-    // shear twist (frame-dragging illusion) near the wells
-    float ang = uTwist * (bendA - bendB);
-    float c = cos(ang), s = sin(ang);
-    vec2 rot = vec2(p.x * c - p.y * s, p.x * s + p.y * c);
-    vDepth = clamp(abs(z) / (uAmp * 2.0 + 4.0), 0.0, 1.0);
-    vec4 mv = modelViewMatrix * vec4(rot, z, 1.0);
-    gl_Position = projectionMatrix * mv;
-    gl_PointSize = uSize * (300.0 / max(-mv.z, 1.0)); // perspective size falloff
-  }
-`;
-
-const FRAG = /* glsl */ `
-  precision mediump float;
-  uniform float uOpacity;
-  varying float vDepth;
-  void main() {
-    vec2 cc = gl_PointCoord - 0.5;
-    float d = length(cc);
-    if (d > 0.5) discard;
-    float soft = smoothstep(0.5, 0.0, d);
-    // single blue, brightening toward white where the fabric is most curved
-    vec3 base = vec3(0.231, 0.51, 0.965);        // #3b82f6
-    vec3 col = mix(base * 0.55, mix(base, vec3(0.75, 0.87, 1.0), vDepth), 0.4 + vDepth * 0.6);
-    float a = soft * uOpacity * (0.22 + vDepth * 0.78);
-    gl_FragColor = vec4(col, a);
-  }
-`;
-
-/** Flat grid of points spanning [-SCALE, SCALE]² on the XY plane. */
-function buildGrid(cols: number, rows: number): BufferGeometry {
-  const pos = new Float32Array(cols * rows * 3);
-  let k = 0;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      pos[k++] = (c / (cols - 1) - 0.5) * 2 * SCALE;
-      pos[k++] = (r / (rows - 1) - 0.5) * 2 * SCALE;
-      pos[k++] = 0;
-    }
-  }
-  const g = new BufferGeometry();
-  g.setAttribute("position", new BufferAttribute(pos, 3));
-  return g;
-}
-
-function Fabric({ cols, rows }: { cols: number; rows: number }) {
-  const matRef = useRef<ShaderMaterial>(null);
-  const geometry = useMemo(() => buildGrid(cols, rows), [cols, rows]);
-  useEffect(() => () => geometry.dispose(), [geometry]);
-
-  const uniforms = useMemo(
-    () => ({
-      uTime: { value: 0 },
-      uAmp: { value: 2.6 },
-      uFreq: { value: 0.08 },
-      uPull: { value: 7 },
-      uTwist: { value: 0.7 },
-      uSize: { value: 2.3 },
-      uOpacity: { value: 0.6 },
-      uWellA: { value: new Vector2() },
-      uWellB: { value: new Vector2() },
-    }),
-    [],
-  );
-
-  useFrame((_, delta) => {
-    const m = matRef.current;
-    if (!m) return;
-    const u = m.uniforms;
-    u.uTime.value += Math.min(delta, 0.05);
-    const t = u.uTime.value;
-    // two wells drift on lazy Lissajous paths
-    u.uWellA.value.set(Math.sin(t * 0.3) * 22, Math.cos(t * 0.22) * 22);
-    u.uWellB.value.set(Math.sin(t * 0.45 + 2) * 18, Math.cos(t * 0.38 + 1) * 18);
-  });
-
-  return (
-    // Tilt the sheet back so it reads as a receding fabric, dropped low so the
-    // densest ripples sit toward the bottom of the section.
-    <points geometry={geometry} rotation={[-0.62, 0, 0]} position={[0, -6, 0]}>
-      <shaderMaterial
-        ref={matRef}
-        transparent
-        depthWrite={false}
-        blending={AdditiveBlending}
-        uniforms={uniforms}
-        vertexShader={VERT}
-        fragmentShader={FRAG}
-      />
-    </points>
-  );
-}
-
-/**
- * Ambient fabric background. Drop it as the first child of a `relative` section;
- * it fills the section behind the content (which should sit at `z-10`).
- */
 export function SpaceTimeFabric() {
-  const wrap = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [tier, setTier] = useState<QualityTier | null>(null);
   const reduce = useMemo(() => prefersReducedMotion(), []);
-  const [inView, setInView] = useState(true);
 
   useEffect(() => setTier(detectQualityTier()), []);
+
   useEffect(() => {
-    const el = wrap.current;
-    if (!el) return;
-    const io = new IntersectionObserver(([e]) => setInView(e.isIntersecting), {
-      threshold: 0,
-    });
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
+    if (tier === null || tier === "low") return;
+    const container = containerRef.current;
+    if (!container) return;
 
-  // Ambient, never essential → skip entirely on the low tier / reduced motion.
-  const show = tier !== null && tier !== "low" && !reduce;
-  const high = tier === "high";
-  const cols = high ? 180 : 120;
-  const rows = high ? 100 : 68;
+    let disposed = false;
+    let cleanup = () => {};
 
-  return (
-    <div
-      ref={wrap}
-      aria-hidden
-      className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
-    >
-      {show && (
-        <Canvas
-          frameloop={inView ? "always" : "never"}
-          dpr={[1, high ? 2 : 1.5]}
-          camera={{ position: [0, 0, 80], fov: 60 }}
-          gl={{ antialias: false, alpha: true, powerPreference: "high-performance" }}
-        >
-          <Fabric cols={cols} rows={rows} />
-        </Canvas>
-      )}
-      {/* Soft center vignette so the contact copy stays legible over the field. */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(0,0,0,0.72)_0%,rgba(0,0,0,0.35)_45%,transparent_75%)]" />
-    </div>
-  );
+    (async () => {
+      const THREE = await import("three");
+      const { EffectComposer } = await import(
+        "three/examples/jsm/postprocessing/EffectComposer.js"
+      );
+      const { RenderPass } = await import(
+        "three/examples/jsm/postprocessing/RenderPass.js"
+      );
+      const { UnrealBloomPass } = await import(
+        "three/examples/jsm/postprocessing/UnrealBloomPass.js"
+      );
+      if (disposed) return;
+
+      const COUNT = tier === "high" ? SWARM_COUNT : Math.round(SWARM_COUNT * 0.6);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const size = () => ({
+        w: Math.max(1, container.clientWidth),
+        h: Math.max(1, container.clientHeight),
+      });
+      let { w, h } = size();
+
+      // --- fabric params ---
+      const scale = 80; // half-extent of the fabric plane
+      const freq = 2.2; // wave frequency
+      const amp = 6; // wave amplitude (depth ripple)
+      const speed = 0.85; // flow speed
+      const pull = 7; // gravity-well strength
+      const twist = 1.3; // shear twist near the wells
+
+      const scene = new THREE.Scene();
+      scene.fog = new THREE.FogExp2(0x000000, 0.006);
+      const camera = new THREE.PerspectiveCamera(60, w / h, 0.1, 2000);
+      camera.position.set(0, 0, 100);
+
+      const renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+        powerPreference: "high-performance",
+      });
+      renderer.setPixelRatio(dpr);
+      renderer.setSize(w, h);
+      renderer.domElement.style.width = "100%";
+      renderer.domElement.style.height = "100%";
+      renderer.domElement.style.display = "block";
+      container.appendChild(renderer.domElement);
+
+      const composer = new EffectComposer(renderer);
+      composer.setPixelRatio(dpr);
+      composer.setSize(w, h);
+      composer.addPass(new RenderPass(scene, camera));
+      const bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 1.5, 0.4, 0.85);
+      bloom.strength = 1.35;
+      bloom.radius = 0.32;
+      bloom.threshold = 0.05;
+      composer.addPass(bloom);
+
+      // --- instanced cones (sharp, like Tesseract) ---
+      const dummy = new THREE.Object3D();
+      const color = new THREE.Color();
+      const target = new THREE.Vector3();
+      const geometry = new THREE.ConeGeometry(0.1, 0.5, 4).rotateX(Math.PI / 2);
+      const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const mesh = new THREE.InstancedMesh(geometry, material, COUNT);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      scene.add(mesh);
+
+      // fixed scattered plane position per particle (hash), + persistent positions
+      const baseX = new Float32Array(COUNT);
+      const baseY = new Float32Array(COUNT);
+      const positions: InstanceType<typeof THREE.Vector3>[] = [];
+      for (let i = 0; i < COUNT; i++) {
+        const u = (Math.sin(i * 12.9898) * 43758.5453) % 1;
+        const v = (Math.sin(i * 78.233) * 12345.6789) % 1;
+        baseX[i] = (u * 2 - 1) * scale;
+        baseY[i] = (v * 2 - 1) * scale;
+        positions.push(
+          new THREE.Vector3(
+            (Math.random() - 0.5) * 100,
+            (Math.random() - 0.5) * 100,
+            (Math.random() - 0.5) * 100,
+          ),
+        );
+        mesh.setColorAt(i, color.setHex(0xffffff));
+      }
+
+      const clock = new THREE.Clock();
+      const animated = !reduce;
+
+      const renderFrame = (snap: boolean) => {
+        const time = (snap ? 0 : clock.getElapsedTime()) * speed;
+        // two wells drift on lazy Lissajous paths
+        const w1x = Math.sin(time * 0.3) * scale * 0.4;
+        const w1y = Math.cos(time * 0.2) * scale * 0.4;
+        const w2x = Math.sin(time * 0.5 + 2) * scale * 0.3;
+        const w2y = Math.cos(time * 0.4 + 1) * scale * 0.3;
+
+        for (let i = 0; i < COUNT; i++) {
+          const x = baseX[i];
+          const y = baseY[i];
+          const wave =
+            Math.sin(x * 0.02 * freq + time) + Math.sin(y * 0.02 * freq - time * 0.8);
+          let z = wave * amp;
+
+          const dx1 = x - w1x;
+          const dy1 = y - w1y;
+          const d1 = Math.sqrt(dx1 * dx1 + dy1 * dy1 + 4);
+          const dx2 = x - w2x;
+          const dy2 = y - w2y;
+          const d2 = Math.sqrt(dx2 * dx2 + dy2 * dy2 + 4);
+          const bend1 = -pull / d1;
+          const bend2 = -pull / d2;
+          z += bend1 + bend2;
+
+          // shear twist (frame-dragging) near the wells
+          const ang = twist * (bend1 - bend2);
+          const cosA = Math.cos(ang);
+          const sinA = Math.sin(ang);
+          const tx = x * cosA - y * sinA;
+          const ty = x * sinA + y * cosA;
+          target.set(tx, ty, z);
+
+          // white, brightening where the sheet is most curved
+          const depth = Math.min(Math.abs(z) / (amp + 4), 1);
+          const lum = Math.min(0.5 + depth * 0.5, 1);
+          color.setHSL(0.58, 0.14, lum);
+
+          if (snap) positions[i].copy(target);
+          else positions[i].lerp(target, 0.1);
+          dummy.position.copy(positions[i]);
+          dummy.updateMatrix();
+          mesh.setMatrixAt(i, dummy.matrix);
+          mesh.setColorAt(i, color);
+        }
+        mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        composer.render();
+      };
+
+      const ro = new ResizeObserver(() => {
+        const s = size();
+        w = s.w;
+        h = s.h;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+        composer.setSize(w, h);
+        if (!animated) renderFrame(true);
+      });
+      ro.observe(container);
+
+      let raf = 0;
+      let running = false;
+      let io: IntersectionObserver | null = null;
+
+      if (animated) {
+        const loop = () => {
+          renderFrame(false);
+          raf = requestAnimationFrame(loop);
+        };
+        const start = () => {
+          if (running) return;
+          running = true;
+          raf = requestAnimationFrame(loop);
+        };
+        const stop = () => {
+          running = false;
+          cancelAnimationFrame(raf);
+        };
+        io = new IntersectionObserver(
+          ([e]) => (e.isIntersecting ? start() : stop()),
+          { threshold: 0 },
+        );
+        io.observe(container);
+        start();
+      } else {
+        renderFrame(true);
+      }
+
+      cleanup = () => {
+        cancelAnimationFrame(raf);
+        io?.disconnect();
+        ro.disconnect();
+        geometry.dispose();
+        material.dispose();
+        bloom.dispose();
+        composer.dispose();
+        renderer.dispose();
+        if (renderer.domElement.parentNode === container) {
+          container.removeChild(renderer.domElement);
+        }
+      };
+    })();
+
+    return () => {
+      disposed = true;
+      cleanup();
+    };
+  }, [tier, reduce]);
+
+  return <div ref={containerRef} aria-hidden className="h-full w-full" />;
 }
