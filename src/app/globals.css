@@ -46,6 +46,24 @@ body {
 * {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* No text selection / copy anywhere on the site — dragging or long-pressing text
+   selects nothing, so page copy can't be selected or copied. Form fields (the
+   admin inputs) opt back IN so they stay usable. */
+html {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+input,
+textarea,
+select,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
+}
 /* When launched from the iPhone home screen (standalone), let long content still
    scroll with momentum. */
 @media (display-mode: standalone) {
