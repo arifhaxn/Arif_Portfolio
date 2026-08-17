@@ -1,213 +1,238 @@
 "use client";
 
 // -----------------------------------------------------------------------------
-// Tesseract — a breathing 4D hypercube, traced by sharp instanced particles
+// Tesseract — breathing 4D hypercube (faithful port of the dubolt export)
 // -----------------------------------------------------------------------------
-// Site-native, optimized reworking of the pasted dubolt sandbox export (a
-// "Breathing Tesseract": a 4-cube stereographically projected into 3D). The
-// particles are REAL geometry — small solid octahedra drawn with an instanced
-// mesh — so they stay crisp at any zoom (unlike fixed-pixel point sprites, which
-// look soft and blur when scaled). The original looped 20k instances in JS every
-// frame; here every instance's 4D rotation + breathing + projection runs in the
-// vertex shader (each instance carries its 4D base coordinate in the `instanceA4`
-// attribute), so it's cheap AND sharp. Recolored to the site's single blue,
-// antialiased, depth-sorted.
-//
-// Replaces the wireframe icosahedron behind the Projects section; obeys the same
-// conventions as the rest of the 3D here: tier-gated (mid/high only; low tier +
-// reduced motion skip it), render loop stops off-screen, dpr-capped.
+// This is the ORIGINAL dubolt rendering — instanced cones, UnrealBloom glow, and
+// FogExp2 (which fades the far-flung projection arms so they dissolve at the
+// edges instead of hard-clipping) — reproduced as closely as possible, because
+// re-deriving it drifted from the reference. Only the host wiring is site-native:
+// sized to its container (not the window), recoloured to the site's blue, and it
+// obeys the same conventions as the rest of the 3D here:
+//   • Device tier (lib/quality): renders on mid/high only; low tier + reduced
+//     motion skip it (ambient, never load-bearing).
+//   • The animation loop stops when the wrapper scrolls out of view.
+//   • Pixel ratio capped; everything disposed on unmount.
+// Replaces the wireframe icosahedron behind the Projects section.
 // -----------------------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import {
-  AdditiveBlending,
-  InstancedBufferAttribute,
-  OctahedronGeometry,
-  ShaderMaterial,
-} from "three";
 import { prefersReducedMotion } from "@/lib/animations";
 import { detectQualityTier, type QualityTier } from "@/lib/quality";
 
-const VERT = /* glsl */ `
-  uniform float uTime;
-  uniform float uRot;
-  uniform float uBreath;
-  uniform float uFuzz;
-  uniform float uScale;
-  uniform float uPScale;      // particle (octahedron) size in world units
-  uniform float uProj;        // 4D projection distance (higher = flatter, less flinging)
-  attribute vec4 instanceA4;  // this instance's base coordinate on the 4-cube
-  attribute float instancePhase;
-  varying float vDepth;
-  varying float vDist;        // distance of this instance's centre from origin
-  void main() {
-    vec4 p = instanceA4;
-    // breathing pulse
-    p *= 1.0 + 0.3 * sin(uTime * uBreath + instancePhase * 0.0001);
-    // three 4D rotation planes (xw, yz, xy), incommensurate speeds
-    float a1 = uTime * uRot;         float c1 = cos(a1), s1 = sin(a1);
-    float x1 = p.x * c1 - p.w * s1;  float w1 = p.x * s1 + p.w * c1;
-    float a2 = uTime * uRot * 0.618; float c2 = cos(a2), s2 = sin(a2);
-    float y1 = p.y * c2 - p.z * s2;  float z1 = p.y * s2 + p.z * c2;
-    float a3 = uTime * uRot * 0.382; float c3 = cos(a3), s3 = sin(a3);
-    float Xf = x1 * c3 - y1 * s3;    float Yf = x1 * s3 + y1 * c3;
-    float Zf = z1;                   float Wf = w1;
-    // a touch of chaos so the edges shimmer
-    Xf += sin(instancePhase * 1.3 + uTime) * uFuzz;
-    Yf += cos(instancePhase * 1.7 - uTime) * uFuzz;
-    Zf += sin(instancePhase * 2.1 + uTime * 1.2) * uFuzz;
-    // stereographic projection 4D -> 3D → this instance's centre
-    float wf = 1.0 / (uProj - Wf + 0.0001);
-    vec3 centre = vec3(Xf, Yf, Zf) * wf * uScale;
-    vDepth = wf;             // nearer in w = brighter
-    vDist = length(centre);  // for the edge fade (so nothing hard-clips)
-    // place the octahedron's local vertex around the projected centre
-    vec3 world = centre + position * uPScale;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(world, 1.0);
-  }
-`;
-
-const FRAG = /* glsl */ `
-  precision mediump float;
-  uniform float uFadeNear;
-  uniform float uFadeFar;
-  varying float vDepth;
-  varying float vDist;
-  void main() {
-    float e = clamp((vDepth - 0.10) * 3.0, 0.0, 1.0);              // w-factor → 0..1
-    vec3 col = mix(vec3(0.16, 0.44, 0.98), vec3(0.72, 0.86, 1.0), e); // blue -> white
-    // fade particles that fling far out (the projection singularity) so the swarm
-    // dissolves toward its edges instead of hard-clipping at the canvas border.
-    float fade = smoothstep(uFadeFar, uFadeNear, vDist);
-    float intensity = (0.35 + e * 0.65) * fade;
-    // additive: the alpha is the added weight, so dense edges glow bright/white.
-    gl_FragColor = vec4(col, intensity);
-  }
-`;
-
-/** Per-instance 4D base coordinates: points spread along the 32 edges of a
- *  4-cube (the shader does the rotation/projection). */
-function buildInstances(count: number) {
-  const EDGES = 32;
-  const per = Math.max(1, Math.floor(count / EDGES));
-  const total = per * EDGES;
-  const a4 = new Float32Array(total * 4);
-  const phase = new Float32Array(total);
-  let k = 0;
-  for (let e = 0; e < EDGES; e++) {
-    const axis = e % 4; // which of the 4 coords varies along this edge
-    const fb = Math.floor(e / 4); // fixed ± signs of the other three
-    const b1 = fb & 1 ? 1 : -1;
-    const b2 = fb & 2 ? 1 : -1;
-    const b3 = fb & 4 ? 1 : -1;
-    for (let j = 0; j < per; j++) {
-      const v = (j / per) * 2 - 1;
-      let x: number, y: number, z: number, w: number;
-      if (axis === 0) { x = v; y = b1; z = b2; w = b3; }
-      else if (axis === 1) { x = b1; y = v; z = b2; w = b3; }
-      else if (axis === 2) { x = b1; y = b2; z = v; w = b3; }
-      else { x = b1; y = b2; z = b3; w = v; }
-      a4[k * 4] = x;
-      a4[k * 4 + 1] = y;
-      a4[k * 4 + 2] = z;
-      a4[k * 4 + 3] = w;
-      phase[k] = k;
-      k++;
-    }
-  }
-  return { a4, phase, total };
-}
-
-function TesseractMesh({ count }: { count: number }) {
-  const matRef = useRef<ShaderMaterial>(null);
-  const { geometry, total } = useMemo(() => {
-    const { a4, phase, total } = buildInstances(count);
-    const g = new OctahedronGeometry(1, 0); // crisp little diamonds
-    g.setAttribute("instanceA4", new InstancedBufferAttribute(a4, 4));
-    g.setAttribute("instancePhase", new InstancedBufferAttribute(phase, 1));
-    return { geometry: g, total };
-  }, [count]);
-  useEffect(() => () => geometry.dispose(), [geometry]);
-
-  const uniforms = useMemo(
-    () => ({
-      uTime: { value: 0 },
-      uRot: { value: 0.35 },
-      uBreath: { value: 1.2 },
-      uFuzz: { value: 0.06 },
-      uScale: { value: 60 },
-      uPScale: { value: 0.3 }, // small crisp specks (dense, like the reference)
-      uProj: { value: 5.0 }, // flatter projection → less flinging → fits the frame
-      uFadeNear: { value: 30 }, // full brightness within this radius
-      uFadeFar: { value: 42 }, // faded to nothing by here (before the canvas edge)
-    }),
-    [],
-  );
-
-  useFrame((_, delta) => {
-    const m = matRef.current;
-    if (m) m.uniforms.uTime.value += Math.min(delta, 0.05);
-  });
-
-  return (
-    // frustumCulled off: the shader displaces vertices far from the geometry's
-    // origin bounds, so three's culling can't see where they actually land.
-    <instancedMesh args={[geometry, undefined, total]} frustumCulled={false}>
-      <shaderMaterial
-        ref={matRef}
-        uniforms={uniforms}
-        vertexShader={VERT}
-        fragmentShader={FRAG}
-        transparent
-        depthWrite={false}
-        depthTest={false}
-        blending={AdditiveBlending}
-      />
-    </instancedMesh>
-  );
-}
-
-/** Ambient hypercube. Drop it in a sized container (fills h/w). */
 export function Tesseract() {
-  const wrap = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [tier, setTier] = useState<QualityTier | null>(null);
   const reduce = useMemo(() => prefersReducedMotion(), []);
-  const [inView, setInView] = useState(true);
 
   useEffect(() => setTier(detectQualityTier()), []);
+
   useEffect(() => {
-    const el = wrap.current;
-    if (!el) return;
-    const io = new IntersectionObserver(([e]) => setInView(e.isIntersecting), {
-      threshold: 0,
-    });
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
+    if (tier === null || tier === "low" || reduce) return;
+    const container = containerRef.current;
+    if (!container) return;
 
-  const show = tier !== null && tier !== "low" && !reduce;
-  const high = tier === "high";
-  const count = high ? 16000 : 8000; // dense, like the reference
+    let disposed = false;
+    let cleanup = () => {};
 
-  return (
-    // Cheap "bloom": a compositor drop-shadow haloes the bright additive pixels
-    // (the same trick the robot uses), so it glows without a postprocessing pass.
-    <div
-      ref={wrap}
-      aria-hidden
-      className="h-full w-full [filter:drop-shadow(0_0_5px_rgba(59,130,246,0.45))]"
-    >
-      {show && (
-        <Canvas
-          frameloop={inView ? "always" : "never"}
-          dpr={[1, 2]} // full pixel ratio → sharp geometry, no upscale blur
-          camera={{ position: [0, 0, 85], fov: 55 }}
-          gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
-        >
-          <TesseractMesh count={count} />
-        </Canvas>
-      )}
-    </div>
-  );
+    (async () => {
+      const THREE = await import("three");
+      const { EffectComposer } = await import(
+        "three/examples/jsm/postprocessing/EffectComposer.js"
+      );
+      const { RenderPass } = await import(
+        "three/examples/jsm/postprocessing/RenderPass.js"
+      );
+      const { UnrealBloomPass } = await import(
+        "three/examples/jsm/postprocessing/UnrealBloomPass.js"
+      );
+      if (disposed) return;
+
+      const COUNT = tier === "high" ? 14000 : 7000;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const size = () => ({
+        w: Math.max(1, container.clientWidth),
+        h: Math.max(1, container.clientHeight),
+      });
+      let { w, h } = size();
+
+      // --- scene (dubolt-exact, minus the full-window sizing) ---
+      const scene = new THREE.Scene();
+      scene.fog = new THREE.FogExp2(0x000000, 0.011);
+      const camera = new THREE.PerspectiveCamera(60, w / h, 0.1, 2000);
+      // Pulled back a touch from the export's z=100 so the whole swarm fits a
+      // square container (the fog fades the arms so the edges don't hard-clip).
+      camera.position.set(0, 0, 115);
+
+      const renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+        powerPreference: "high-performance",
+      });
+      renderer.setPixelRatio(dpr);
+      renderer.setSize(w, h);
+      renderer.domElement.style.width = "100%";
+      renderer.domElement.style.height = "100%";
+      renderer.domElement.style.display = "block";
+      container.appendChild(renderer.domElement);
+
+      const composer = new EffectComposer(renderer);
+      composer.setPixelRatio(dpr);
+      composer.setSize(w, h);
+      composer.addPass(new RenderPass(scene, camera));
+      const bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 1.5, 0.4, 0.85);
+      bloom.strength = 1.6;
+      bloom.radius = 0.5;
+      bloom.threshold = 0;
+      composer.addPass(bloom);
+
+      // --- instanced cones (dubolt-exact) ---
+      const dummy = new THREE.Object3D();
+      const color = new THREE.Color();
+      const target = new THREE.Vector3();
+      const geometry = new THREE.ConeGeometry(0.1, 0.5, 4).rotateX(Math.PI / 2);
+      const material = new THREE.MeshBasicMaterial({ color: 0x2b7bff });
+      const mesh = new THREE.InstancedMesh(geometry, material, COUNT);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      scene.add(mesh);
+
+      const positions: InstanceType<typeof THREE.Vector3>[] = [];
+      for (let i = 0; i < COUNT; i++) {
+        positions.push(
+          new THREE.Vector3(
+            (Math.random() - 0.5) * 100,
+            (Math.random() - 0.5) * 100,
+            (Math.random() - 0.5) * 100,
+          ),
+        );
+        mesh.setColorAt(i, color.setHex(0x2b7bff));
+      }
+
+      // dubolt params
+      const rotSpeed = 0.8;
+      const breathSpeed = 1.2;
+      const scale = 50;
+      const fuzz = 0.15;
+      const clock = new THREE.Clock();
+
+      const renderFrame = () => {
+        const time = clock.getElapsedTime();
+        const count = COUNT;
+        for (let i = 0; i < COUNT; i++) {
+          const edges = 32;
+          const per = Math.max(1, Math.floor(count / edges));
+          const edgeIndex = Math.floor(i / per) % edges;
+          const edgeT = (i % per) / per;
+          const v = edgeT * 2 - 1;
+          const axis = edgeIndex % 4;
+          const fb = Math.floor(edgeIndex / 4);
+          const b1 = fb & 1 ? 1 : -1;
+          const b2 = fb & 2 ? 1 : -1;
+          const b3 = fb & 4 ? 1 : -1;
+
+          let x4 = 0, y4 = 0, z4 = 0, w4 = 0;
+          if (axis === 0) { x4 = v; y4 = b1; z4 = b2; w4 = b3; }
+          else if (axis === 1) { x4 = b1; y4 = v; z4 = b2; w4 = b3; }
+          else if (axis === 2) { x4 = b1; y4 = b2; z4 = v; w4 = b3; }
+          else { x4 = b1; y4 = b2; z4 = b3; w4 = v; }
+
+          const breath = 1 + 0.3 * Math.sin(time * breathSpeed + i * 0.0001);
+          x4 *= breath; y4 *= breath; z4 *= breath; w4 *= breath;
+
+          const a1 = time * rotSpeed;
+          const c1 = Math.cos(a1), s1 = Math.sin(a1);
+          const x_1 = x4 * c1 - w4 * s1;
+          const w_1 = x4 * s1 + w4 * c1;
+          const a2 = time * rotSpeed * 0.618;
+          const c2 = Math.cos(a2), s2 = Math.sin(a2);
+          const y_1 = y4 * c2 - z4 * s2;
+          const z_1 = y4 * s2 + z4 * c2;
+          const a3 = time * rotSpeed * 0.382;
+          const c3 = Math.cos(a3), s3 = Math.sin(a3);
+          const X_f = x_1 * c3 - y_1 * s3;
+          const Y_f = x_1 * s3 + y_1 * c3;
+          const Z_f = z_1;
+          const W_f = w_1;
+
+          const pX = X_f + Math.sin(i * 1.3 + time) * fuzz;
+          const pY = Y_f + Math.cos(i * 1.7 - time) * fuzz;
+          const pZ = Z_f + Math.sin(i * 2.1 + time * 1.2) * fuzz;
+
+          const wFactor = 1.0 / (4.0 - W_f + 0.0001);
+          target.set(pX * wFactor * scale, pY * wFactor * scale, pZ * wFactor * scale);
+
+          // Recoloured to the site's blue (was a rainbow HSL): a single hue, just
+          // brightening with the projection depth.
+          const lum = Math.min(Math.max(0.2 + wFactor * 0.6, 0.12), 1);
+          color.setHSL(0.58 + W_f * 0.03, 0.85, lum);
+
+          positions[i].lerp(target, 0.1);
+          dummy.position.copy(positions[i]);
+          dummy.updateMatrix();
+          mesh.setMatrixAt(i, dummy.matrix);
+          mesh.setColorAt(i, color);
+        }
+        mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        composer.render();
+      };
+
+      // --- loop, gated by visibility ---
+      let raf = 0;
+      let running = false;
+      const loop = () => {
+        renderFrame();
+        raf = requestAnimationFrame(loop);
+      };
+      const start = () => {
+        if (running) return;
+        running = true;
+        raf = requestAnimationFrame(loop);
+      };
+      const stop = () => {
+        running = false;
+        cancelAnimationFrame(raf);
+      };
+
+      const io = new IntersectionObserver(
+        ([e]) => (e.isIntersecting ? start() : stop()),
+        { threshold: 0 },
+      );
+      io.observe(container);
+
+      const ro = new ResizeObserver(() => {
+        const s = size();
+        w = s.w;
+        h = s.h;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+        composer.setSize(w, h);
+      });
+      ro.observe(container);
+
+      start();
+
+      cleanup = () => {
+        stop();
+        io.disconnect();
+        ro.disconnect();
+        geometry.dispose();
+        material.dispose();
+        bloom.dispose();
+        composer.dispose();
+        renderer.dispose();
+        if (renderer.domElement.parentNode === container) {
+          container.removeChild(renderer.domElement);
+        }
+      };
+    })();
+
+    return () => {
+      disposed = true;
+      cleanup();
+    };
+  }, [tier, reduce]);
+
+  return <div ref={containerRef} aria-hidden className="h-full w-full" />;
 }
