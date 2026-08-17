@@ -4,6 +4,7 @@ import { QualityTierMarker } from "@/components/providers/QualityTierMarker";
 import { Navbar } from "@/components/Navbar";
 import { PixelReveal } from "@/components/PixelReveal";
 import { CursorDot } from "@/components/CursorDot";
+import { MediaGuard } from "@/components/MediaGuard";
 import { getNavbar } from "@/lib/content";
 
 // (site) layout — the PUBLIC marketing-site chrome. Everything the landing pages
@@ -44,6 +45,10 @@ export default async function SiteLayout({
       {/* Custom cursor — a white dot that eases toward the pointer, site-wide
           (fine-pointer devices only; leaves touch as-is). */}
       <CursorDot />
+      {/* Kills the native drag ghost and the "Copy image" context menu on images
+          and the WebGL canvases — the same "page copy isn't yours to lift" intent
+          as the site-wide user-select:none. Public site only; /admin keeps both. */}
+      <MediaGuard />
     </>
   );
 }

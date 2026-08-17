@@ -101,6 +101,20 @@ select,
   -moz-user-select: text;
   user-select: text;
 }
+/* Same intent for MEDIA: images and the WebGL canvases are page furniture, not
+   assets to be lifted out of the layout, so pressing and moving one must never
+   start the browser's native drag ghost. On the achievements board that ghost
+   also fought the pan — it captured the pointer, so a drag begun on a card
+   dragged the picture instead of panning the board.
+   `-webkit-user-drag` is WebKit/Blink-only (there is no standard property);
+   Firefox honours the `dragstart` event instead, which <MediaGuard> cancels —
+   the two together cover every browser. MediaGuard also suppresses the
+   right-click "Copy image" menu, but it mounts from the (site) layout only, so
+   /admin keeps its normal context menu on image previews. */
+img,
+canvas {
+  -webkit-user-drag: none;
+}
 /* When launched from the iPhone home screen (standalone), let long content still
    scroll with momentum. */
 @media (display-mode: standalone) {
