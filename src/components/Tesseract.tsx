@@ -261,6 +261,10 @@ export function Tesseract() {
         material.dispose();
         bloom.dispose();
         composer.dispose();
+        // forceContextLoss() actually RELEASES the GPU context; dispose() alone
+        // leaks it, so navigating repeatedly piles up contexts until the browser
+        // hits its ~16-context limit and kills / crashes the tab.
+        renderer.forceContextLoss();
         renderer.dispose();
         if (renderer.domElement.parentNode === container) {
           container.removeChild(renderer.domElement);
