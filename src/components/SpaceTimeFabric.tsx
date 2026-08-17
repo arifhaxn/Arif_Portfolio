@@ -20,18 +20,29 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { prefersReducedMotion } from "@/lib/animations";
-import { detectQualityTier, type QualityTier } from "@/lib/quality";
+import { detectQualityTier, QUALITY, type QualityTier } from "@/lib/quality";
 import { SWARM_COUNT } from "@/lib/motion";
 
 export function SpaceTimeFabric() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [tier, setTier] = useState<QualityTier | null>(null);
   const reduce = useMemo(() => prefersReducedMotion(), []);
+  // Desktop-only: a per-frame CPU displacement loop + bloom is too heavy for
+  // phones (and it's an ambient backdrop). Gating the effect means no WebGL
+  // context is created on mobile at all.
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const apply = () => setWide(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   useEffect(() => setTier(detectQualityTier()), []);
 
   useEffect(() => {
-    if (tier === null || tier === "low") return;
+    if (tier === null || tier === "low" || !wide) return;
     const container = containerRef.current;
     if (!container) return;
 
@@ -54,7 +65,8 @@ export function SpaceTimeFabric() {
       // A bit denser than the tesseract — this is a spread field, not edges.
       const COUNT =
         tier === "high" ? Math.round(SWARM_COUNT * 1.25) : Math.round(SWARM_COUNT * 0.8);
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      // Tier-aware pixel-ratio cap (high 2, mid 1.5) so mid devices render lighter.
+      const dpr = Math.min(window.devicePixelRatio || 1, QUALITY[tier].maxDpr);
       const size = () => ({
         w: Math.max(1, container.clientWidth),
         h: Math.max(1, container.clientHeight),
@@ -242,7 +254,7 @@ export function SpaceTimeFabric() {
       disposed = true;
       cleanup();
     };
-  }, [tier, reduce]);
+  }, [tier, reduce, wide]);
 
   return <div ref={containerRef} aria-hidden className="h-full w-full" />;
 }
