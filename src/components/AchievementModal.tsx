@@ -115,7 +115,7 @@ export function AchievementModal({
               alt={`${achievement.title} certificate`}
               fill
               sizes="(min-width: 768px) 32rem, 90vw"
-              className="object-cover"
+              className="object-contain"
               priority
             />
           ) : (

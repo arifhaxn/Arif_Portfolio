@@ -31,18 +31,21 @@ export function AchievementCard({
 }) {
   return (
     <div
-      className={`relative h-full w-full rounded-xl ring-1 transition duration-300 ease-out will-change-transform ${
+      className={`relative h-full w-full rounded-xl bg-zinc-950 ring-1 transition duration-300 ease-out will-change-transform ${
         focused ? "z-10 scale-[1.12] ring-white/50" : "scale-100 ring-white/10"
       }`}
     >
       {/* --- Visual: real scan when available, else the placeholder shell --- */}
+      {/* object-contain: show the WHOLE certificate at its true proportions (no
+          crop); the card stays a fixed cell for the grid/pan, so off-aspect scans
+          just sit letterboxed on the dark card. */}
       {achievement.image ? (
         <Image
           src={achievement.image}
           alt={`${achievement.title} certificate`}
           fill
           sizes="(min-width: 1024px) 20rem, 45vw"
-          className="rounded-xl object-cover"
+          className="rounded-xl object-contain"
         />
       ) : (
         <div className="flex h-full w-full flex-col items-center justify-center gap-3 rounded-xl bg-gradient-to-br from-zinc-900 via-zinc-950 to-black">
