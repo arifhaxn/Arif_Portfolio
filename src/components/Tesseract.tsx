@@ -92,9 +92,9 @@ export function Tesseract() {
       composer.setSize(w, h);
       composer.addPass(new RenderPass(scene, camera));
       const bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 1.5, 0.4, 0.85);
-      bloom.strength = 2.0; // a touch brighter glow
+      bloom.strength = 1.35; // softer glow (was running hot)
       bloom.radius = 0.4;
-      bloom.threshold = 0;
+      bloom.threshold = 0.05; // let the dimmest particles NOT bloom → less flicker
       composer.addPass(bloom);
 
       // --- instanced cones (dubolt-exact) ---
@@ -124,7 +124,7 @@ export function Tesseract() {
       const rotSpeed = 0.8;
       const breathSpeed = 1.2;
       const scale = 54; // slightly larger projection
-      const fuzz = 0.18;
+      const fuzz = 0.07; // less per-frame jitter → smoother, less shimmer/flicker
       const clock = new THREE.Clock();
       const animated = !reduce;
 
