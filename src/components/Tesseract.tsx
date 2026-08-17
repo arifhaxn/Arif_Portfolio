@@ -73,7 +73,7 @@ export function Tesseract() {
       const scene = new THREE.Scene();
       scene.fog = new THREE.FogExp2(0x000000, 0.01);
       const camera = new THREE.PerspectiveCamera(60, w / h, 0.1, 2000);
-      camera.position.set(0, 0, 100);
+      camera.position.set(0, 0, 80); // closer than the source's 100 → bigger in frame
 
       const renderer = new THREE.WebGLRenderer({
         antialias: true,
@@ -92,7 +92,7 @@ export function Tesseract() {
       composer.setSize(w, h);
       composer.addPass(new RenderPass(scene, camera));
       const bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 1.5, 0.4, 0.85);
-      bloom.strength = 1.8;
+      bloom.strength = 2.0; // a touch brighter glow
       bloom.radius = 0.4;
       bloom.threshold = 0;
       composer.addPass(bloom);
@@ -102,7 +102,7 @@ export function Tesseract() {
       const color = new THREE.Color();
       const target = new THREE.Vector3();
       const geometry = new THREE.ConeGeometry(0.1, 0.5, 4).rotateX(Math.PI / 2);
-      const material = new THREE.MeshBasicMaterial({ color: 0x00aaff });
+      const material = new THREE.MeshBasicMaterial({ color: 0xffffff }); // white (no blue tint)
       const mesh = new THREE.InstancedMesh(geometry, material, COUNT);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       scene.add(mesh);
@@ -123,7 +123,7 @@ export function Tesseract() {
       // dubolt params
       const rotSpeed = 0.8;
       const breathSpeed = 1.2;
-      const scale = 50;
+      const scale = 54; // slightly larger projection
       const fuzz = 0.18;
       const clock = new THREE.Clock();
       const animated = !reduce;
@@ -176,11 +176,11 @@ export function Tesseract() {
           const wFactor = 1.0 / (4.0 - W_f + 0.0001);
           target.set(pX * wFactor * scale, pY * wFactor * scale, pZ * wFactor * scale);
 
-          // dubolt-exact colour: hue from the w-coord + index, luminance from the
-          // projection factor (the blue/cyan/green gradient), tinted by 0x00aaff.
-          const hue = 0.7 + W_f * 0.15 + (i / count) * 0.1;
-          const lum = Math.min(Math.max(0.2 + wFactor * 0.6, 0.1), 1);
-          color.setHSL(Math.abs(hue % 1.0), 0.8, lum);
+          // White with a faint cool tint (low saturation), brighter than the
+          // source; the projection factor still drives the luminance variation.
+          const hue = 0.58 + W_f * 0.05;
+          const lum = Math.min(Math.max(0.55 + wFactor * 0.55, 0.4), 1);
+          color.setHSL(Math.abs(hue % 1.0), 0.18, lum);
 
           if (snap) positions[i].copy(target);
           else positions[i].lerp(target, 0.1);

@@ -53,7 +53,7 @@ export const DURATION = {
 } as const;
 
 /** Resting opacity of the Projects background hypercube (ambient, not focal). */
-export const BG_SHAPE_OPACITY = 0.65;
+export const BG_SHAPE_OPACITY = 0.85;
 
 /** Projects background particle-swarm (Tesseract) instance count. Tunable — the
  *  per-frame 4D rotation + stereographic projection runs on the CPU per particle,
