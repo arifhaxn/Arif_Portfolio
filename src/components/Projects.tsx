@@ -227,11 +227,13 @@ export function Projects({ projects }: { projects: Project[] }) {
         <div className="sticky top-0 flex h-screen items-center justify-center">
           <div
             ref={bgShape}
-            className="relative aspect-square w-[clamp(24rem,42vw,34rem)] opacity-0"
+            // Widescreen-ish box (the hypercube's projection arms reach wider than
+            // the old square could hold) so the swarm fits at the source's z=100
+            // instead of clipping left/right.
+            className="relative aspect-[3/2] w-[clamp(36rem,62vw,66rem)] opacity-0"
           >
-            {/* Slow idle auto-spin on the ambient centerpiece; mouse tilt still
-                tracks on top of it. Mounted after layout settles (bgReady) so the
-                canvas measures/centres correctly on first paint. */}
+            {/* The swarm auto-rotates on its own; mounted after layout settles
+                (bgReady) so the canvas measures/centres correctly on first paint. */}
             {bgReady && <Tesseract />}
           </div>
         </div>

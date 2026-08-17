@@ -55,6 +55,12 @@ export const DURATION = {
 /** Resting opacity of the Projects background hypercube (ambient, not focal). */
 export const BG_SHAPE_OPACITY = 0.65;
 
+/** Projects background particle-swarm (Tesseract) instance count. Tunable — the
+ *  per-frame 4D rotation + stereographic projection runs on the CPU per particle,
+ *  so keep it modest (source uses 20k; behind the pinned marquee that's too much).
+ *  This is the HIGH-tier count; mid tier renders ~60% of it. */
+export const SWARM_COUNT = 8000;
+
 /**
  * Achievements grid — pan/warp + idle-drift tuning. Kept together so the whole
  * "liquid grid" feel can be re-tuned in one place. `panFactor` scales raw input

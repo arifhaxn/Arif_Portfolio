@@ -3,22 +3,35 @@
 // -----------------------------------------------------------------------------
 // Tesseract — breathing 4D hypercube (faithful port of the dubolt export)
 // -----------------------------------------------------------------------------
-// This is the ORIGINAL dubolt rendering — instanced cones, UnrealBloom glow, and
-// FogExp2 (which fades the far-flung projection arms so they dissolve at the
-// edges instead of hard-clipping) — reproduced as closely as possible, because
-// re-deriving it drifted from the reference. Only the host wiring is site-native:
-// sized to its container (not the window), recoloured to the site's blue, and it
-// obeys the same conventions as the rest of the 3D here:
-//   • Device tier (lib/quality): renders on mid/high only; low tier + reduced
-//     motion skip it (ambient, never load-bearing).
-//   • The animation loop stops when the wrapper scrolls out of view.
-//   • Pixel ratio capped; everything disposed on unmount.
-// Replaces the wireframe icosahedron behind the Projects section.
+// A close port of the ORIGINAL dubolt rendering (see /dubolt.html — the cone +
+// flat-material variant, NOT the sphere/metallic one), reproduced rather than
+// re-derived so it matches the reference recording:
+//   • instanced ConeGeometry(0.1, 0.5, 4) + flat MeshBasicMaterial (0x00aaff),
+//   • the exact 32-edge tesseract enumeration, 3-plane 4D rotation, breathing,
+//     fuzz jitter and stereographic projection, verbatim,
+//   • UnrealBloom (strength 1.8, radius 0.4, threshold 0) — most of the neon
+//     glow comes from here,
+//   • FogExp2(0x000000, 0.01) — fades the far projection arms so the swarm
+//     dissolves at the edges instead of hard-clipping its container,
+//   • the persistent positions array, lerped toward each target every frame
+//     (positions[i].lerp(target, 0.1)) — the trailing/fluid feel; built once and
+//     mutated in place, never recreated.
+// (The dubolt.js sandbox's duplicate `let THREE_LIB` decl is a genuine syntax
+// error and is simply not reproduced.)
+//
+// Only the host wiring is site-native: bloom via raw three (its UnrealBloomPass
+// gives the exact strength/radius/threshold the reference used); sized to its
+// container with a ResizeObserver; auto-rotate only (no OrbitControls — it sits
+// behind readable content); tier-gated (mid/high; low tier skips it, mobile is
+// already dropped by the `hidden lg:block` wrapper in Projects); the loop stops
+// off-screen; reduced motion renders a single STATIC resolved frame; disposed on
+// unmount. Replaces the wireframe icosahedron behind the Projects section.
 // -----------------------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { prefersReducedMotion } from "@/lib/animations";
 import { detectQualityTier, type QualityTier } from "@/lib/quality";
+import { SWARM_COUNT } from "@/lib/motion";
 
 export function Tesseract() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -28,7 +41,7 @@ export function Tesseract() {
   useEffect(() => setTier(detectQualityTier()), []);
 
   useEffect(() => {
-    if (tier === null || tier === "low" || reduce) return;
+    if (tier === null || tier === "low") return;
     const container = containerRef.current;
     if (!container) return;
 
@@ -48,7 +61,7 @@ export function Tesseract() {
       );
       if (disposed) return;
 
-      const COUNT = tier === "high" ? 14000 : 7000;
+      const COUNT = tier === "high" ? SWARM_COUNT : Math.round(SWARM_COUNT * 0.6);
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const size = () => ({
         w: Math.max(1, container.clientWidth),
@@ -56,13 +69,11 @@ export function Tesseract() {
       });
       let { w, h } = size();
 
-      // --- scene (dubolt-exact, minus the full-window sizing) ---
+      // --- scene (dubolt-exact) ---
       const scene = new THREE.Scene();
-      scene.fog = new THREE.FogExp2(0x000000, 0.011);
+      scene.fog = new THREE.FogExp2(0x000000, 0.01);
       const camera = new THREE.PerspectiveCamera(60, w / h, 0.1, 2000);
-      // Pulled back a touch from the export's z=100 so the whole swarm fits a
-      // square container (the fog fades the arms so the edges don't hard-clip).
-      camera.position.set(0, 0, 115);
+      camera.position.set(0, 0, 100);
 
       const renderer = new THREE.WebGLRenderer({
         antialias: true,
@@ -81,8 +92,8 @@ export function Tesseract() {
       composer.setSize(w, h);
       composer.addPass(new RenderPass(scene, camera));
       const bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 1.5, 0.4, 0.85);
-      bloom.strength = 1.6;
-      bloom.radius = 0.5;
+      bloom.strength = 1.8;
+      bloom.radius = 0.4;
       bloom.threshold = 0;
       composer.addPass(bloom);
 
@@ -91,11 +102,12 @@ export function Tesseract() {
       const color = new THREE.Color();
       const target = new THREE.Vector3();
       const geometry = new THREE.ConeGeometry(0.1, 0.5, 4).rotateX(Math.PI / 2);
-      const material = new THREE.MeshBasicMaterial({ color: 0x2b7bff });
+      const material = new THREE.MeshBasicMaterial({ color: 0x00aaff });
       const mesh = new THREE.InstancedMesh(geometry, material, COUNT);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       scene.add(mesh);
 
+      // persistent positions — built ONCE, mutated in place (the trailing feel)
       const positions: InstanceType<typeof THREE.Vector3>[] = [];
       for (let i = 0; i < COUNT; i++) {
         positions.push(
@@ -105,18 +117,21 @@ export function Tesseract() {
             (Math.random() - 0.5) * 100,
           ),
         );
-        mesh.setColorAt(i, color.setHex(0x2b7bff));
+        mesh.setColorAt(i, color.setHex(0x00ff88));
       }
 
       // dubolt params
       const rotSpeed = 0.8;
       const breathSpeed = 1.2;
       const scale = 50;
-      const fuzz = 0.15;
+      const fuzz = 0.18;
       const clock = new THREE.Clock();
+      const animated = !reduce;
 
-      const renderFrame = () => {
-        const time = clock.getElapsedTime();
+      // `snap` true = reduced-motion static frame: use time 0 and place particles
+      // directly on their rest targets (no rotation/breathing/trailing).
+      const renderFrame = (snap: boolean) => {
+        const time = snap ? 0 : clock.getElapsedTime();
         const count = COUNT;
         for (let i = 0; i < COUNT; i++) {
           const edges = 32;
@@ -161,12 +176,14 @@ export function Tesseract() {
           const wFactor = 1.0 / (4.0 - W_f + 0.0001);
           target.set(pX * wFactor * scale, pY * wFactor * scale, pZ * wFactor * scale);
 
-          // Recoloured to the site's blue (was a rainbow HSL): a single hue, just
-          // brightening with the projection depth.
-          const lum = Math.min(Math.max(0.2 + wFactor * 0.6, 0.12), 1);
-          color.setHSL(0.58 + W_f * 0.03, 0.85, lum);
+          // dubolt-exact colour: hue from the w-coord + index, luminance from the
+          // projection factor (the blue/cyan/green gradient), tinted by 0x00aaff.
+          const hue = 0.7 + W_f * 0.15 + (i / count) * 0.1;
+          const lum = Math.min(Math.max(0.2 + wFactor * 0.6, 0.1), 1);
+          color.setHSL(Math.abs(hue % 1.0), 0.8, lum);
 
-          positions[i].lerp(target, 0.1);
+          if (snap) positions[i].copy(target);
+          else positions[i].lerp(target, 0.1);
           dummy.position.copy(positions[i]);
           dummy.updateMatrix();
           mesh.setMatrixAt(i, dummy.matrix);
@@ -177,29 +194,6 @@ export function Tesseract() {
         composer.render();
       };
 
-      // --- loop, gated by visibility ---
-      let raf = 0;
-      let running = false;
-      const loop = () => {
-        renderFrame();
-        raf = requestAnimationFrame(loop);
-      };
-      const start = () => {
-        if (running) return;
-        running = true;
-        raf = requestAnimationFrame(loop);
-      };
-      const stop = () => {
-        running = false;
-        cancelAnimationFrame(raf);
-      };
-
-      const io = new IntersectionObserver(
-        ([e]) => (e.isIntersecting ? start() : stop()),
-        { threshold: 0 },
-      );
-      io.observe(container);
-
       const ro = new ResizeObserver(() => {
         const s = size();
         w = s.w;
@@ -208,14 +202,41 @@ export function Tesseract() {
         camera.updateProjectionMatrix();
         renderer.setSize(w, h);
         composer.setSize(w, h);
+        if (!animated) renderFrame(true); // keep the static frame correct on resize
       });
       ro.observe(container);
 
-      start();
+      let raf = 0;
+      let running = false;
+      let io: IntersectionObserver | null = null;
+
+      if (animated) {
+        const loop = () => {
+          renderFrame(false);
+          raf = requestAnimationFrame(loop);
+        };
+        const start = () => {
+          if (running) return;
+          running = true;
+          raf = requestAnimationFrame(loop);
+        };
+        const stop = () => {
+          running = false;
+          cancelAnimationFrame(raf);
+        };
+        io = new IntersectionObserver(
+          ([e]) => (e.isIntersecting ? start() : stop()),
+          { threshold: 0 },
+        );
+        io.observe(container);
+        start();
+      } else {
+        renderFrame(true); // one static resolved frame under reduced motion
+      }
 
       cleanup = () => {
-        stop();
-        io.disconnect();
+        cancelAnimationFrame(raf);
+        io?.disconnect();
         ro.disconnect();
         geometry.dispose();
         material.dispose();
