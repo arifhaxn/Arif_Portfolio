@@ -43,6 +43,16 @@ export function Navbar({ nav }: { nav: NavbarContent }) {
   const leftLinks = nav.links.filter((l) => l.side === "left");
   const rightLinks = nav.links.filter((l) => l.side === "right");
 
+  // The mobile sheet is a single stacked list, so it needs its own order rather
+  // than the corner-driven one: browse the site first, then Contact last, since
+  // it's the call to action and not another section to look through. Desktop is
+  // untouched — its corners still come from each link's `side`.
+  // Identified by the "#contact" hash, the same way Hero picks it out
+  // (CONTACT_HREF); if that href is ever changed in the admin this quietly falls
+  // back to the authored order instead of dropping or duplicating anything.
+  const isContact = (l: NavbarContent["links"][number]) => l.href.includes("#contact");
+  const sheetLinks = [...nav.links.filter((l) => !isContact(l)), ...nav.links.filter(isContact)];
+
   // Mobile menu: the four corner links + centered mark don't fit a phone width,
   // so on <sm the links collapse into a toggle that opens a full-screen sheet.
   const [menuOpen, setMenuOpen] = useState(false);
@@ -200,7 +210,7 @@ export function Navbar({ nav }: { nav: NavbarContent }) {
         }`}
         aria-hidden={!menuOpen}
       >
-        {nav.links.map((link) => (
+        {sheetLinks.map((link) => (
           <Link
             key={link.href}
             href={link.href}
