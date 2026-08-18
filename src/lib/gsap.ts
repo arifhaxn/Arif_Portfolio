@@ -18,7 +18,6 @@ import { useGSAP } from "@gsap/react";
 import {
   guardGsapContextCycles,
   guardGsapContextKillCycles,
-  guardGsapRevertRecursion,
 } from "@/lib/gsapContextGuard";
 
 // Register plugins only on the client. In the App Router this file can be pulled
@@ -52,18 +51,6 @@ if (typeof window !== "undefined") {
     );
   });
 
-  // The crash that actually reproduces is a runaway Animation.revert recursion
-  // (revert → render → revert). Stop it before the stack dies, and report the
-  // animation doing it — a stack trace can't, because an overflow keeps only the
-  // innermost frames and our own are far below them.
-  guardGsapRevertRecursion(gsap, (info) => {
-    console.error(
-      "[gsap-revert-runaway] Animation.revert recursed past the limit and was " +
-        "stopped before it could overflow the stack. Offending animation: " +
-        JSON.stringify(info) +
-        ` Route: ${window.location.pathname}`,
-    );
-  });
 
   guardGsapContextCycles(gsap, ({ skipped, rootDataLength }) => {
     console.error(

@@ -1,10 +1,13 @@
 // -----------------------------------------------------------------------------
 // gsapContextGuard — stop a looping context graph from killing the tab
 // -----------------------------------------------------------------------------
-// Leaving /about could crash the page outright ("This page couldn't load"). The
-// captured error is a RangeError — "Maximum call stack size exceeded" — with a
-// stack that is nothing but `Context.getTweens` → `Array.forEach` →
-// `Context.getTweens`, repeating until the stack is gone.
+// Leaving /about crashed the page outright ("This page couldn't load"), with a
+// RangeError — "Maximum call stack size exceeded". The cause is a CYCLE in
+// GSAP's context graph, which two separate traversals then recurse through
+// forever. Both are guarded here, and both guards are needed; see
+// guardGsapContextKillCycles for why neither alone is enough.
+//
+// Traversal 1 — Context.getTweens:
 //
 // GSAP's Context.getTweens (gsap-core, ~L3949) collects a context's tweens by
 // recursing into any entry of `data` that is itself a Context:
@@ -30,10 +33,11 @@
 // context reached by two paths has no more tweens the second time — so this
 // changes no legitimate result. It only removes the ability to loop forever.
 //
-// This is a SAFETY NET, not a diagnosis. It stops the crash; it does not explain
-// which of our components builds the loop. That's what `onCycle` is for: it fires
-// the first time a repeat is actually seen, so the root cause can be traced from
-// a real reproduction rather than guessed at.
+// These guards make the CYCLE survivable; they don't stop it forming. GSAP's
+// own Context.add is what builds it, so the cycle is still there, silently.
+// Both `onCycle` hooks log when they catch one — if those ever start firing,
+// that's the signal to go find which component's useGSAP/matchMedia pairing is
+// producing it, rather than leaving the graph malformed indefinitely.
 // -----------------------------------------------------------------------------
 
 type GsapLike = {
@@ -139,9 +143,11 @@ export function guardGsapContextCycles(
  * that is mid-kill is a no-op by definition — it is already being torn down —
  * so this changes nothing legitimate and removes the ability to loop.
  *
- * Note this is a DIFFERENT recursion from the getTweens one above and from the
- * revert/render depth guard below; each guards a distinct path, and only this
- * one matches the captured stack.
+ * This is a DIFFERENT recursion from the getTweens one above, and BOTH are
+ * required — verified against the real gsap build. With a cycle present,
+ * getTweens overflows before kill ever recurses, so the getTweens guard alone
+ * left the crash intact (it only moved the stack); and without it, this guard
+ * never gets reached. Neither is redundant.
  */
 export function guardGsapContextKillCycles(
   gsap: unknown,
@@ -184,95 +190,4 @@ export function guardGsapContextKillCycles(
       inFlight.delete(this);
     }
   };
-}
-
-/** How deep the revert/render cycle may nest before we call it a runaway. A
- *  legitimately nested timeline reverts maybe a dozen levels deep; a runaway
- *  reaches thousands in milliseconds, so 100 separates them with room to spare. */
-const MAX_REVERT_DEPTH = 100;
-
-/**
- * Break — and identify — a runaway `Animation.revert` recursion.
- *
- * The captured crash is a stack overflow whose repeating unit is
- * `revert → totalTime → render → render → styleSaver.revert`, i.e. reverting an
- * animation renders something that reverts again, forever. A stack trace can't
- * name the culprit: an overflow stack is thousands of frames deep and the
- * browser only keeps the innermost ~50, so the frame identifying OUR animation
- * is always below the cut. The only way to see it is to catch the recursion
- * while it is still shallow enough to inspect.
- *
- * So: count re-entrancy, and at the limit stop recursing (returning the
- * animation un-reverted, which beats a dead tab) and hand the offending
- * animation to `onRunaway` — described, since by then we have it in hand.
- *
- * @param onRunaway called once per page life, with a description of the
- *                  animation that was looping.
- */
-export function guardGsapRevertRecursion(
-  gsap: unknown,
-  onRunaway?: (info: Record<string, unknown>) => void,
-): void {
-  const core = (gsap as {
-    core?: { Animation?: Ctor; Timeline?: Ctor; Tween?: Ctor };
-  }).core;
-  const proto = core?.Animation?.prototype as Record<string, unknown> | undefined;
-  if (!proto || typeof proto.revert !== "function" || proto.__revertGuarded) return;
-  proto.__revertGuarded = true;
-
-  // ONE depth shared by revert and render. The captured stack cycles between
-  // them — revert → totalTime → render → render → styleSaver.revert — so a
-  // counter on either method alone can sit at 1 forever while the other spins.
-  // Render is also where a Flip timeline's own revert() override lands, which
-  // shadows this prototype and would otherwise slip past entirely.
-  let depth = 0;
-  let reported = false;
-
-  const describe = (a: Record<string, unknown>) => {
-    const targets = (a as { targets?: () => unknown[] }).targets;
-    let described: string[] = [];
-    try {
-      described = (typeof targets === "function" ? targets.call(a) : [])
-        .slice(0, 4)
-        .map((t) =>
-          t instanceof Element
-            ? `${t.tagName.toLowerCase()}.${String(t.className).slice(0, 40)}` +
-              (t.isConnected ? "" : " [DETACHED]")
-            : Object.prototype.toString.call(t),
-        );
-    } catch {
-      /* targets() isn't available on every animation type */
-    }
-    return {
-      kind: a?.constructor?.name,
-      data: String((a as { data?: unknown }).data ?? ""),
-      vars: Object.keys(((a as { vars?: object }).vars || {}) as object).slice(0, 12),
-      targets: described,
-      depth,
-    };
-  };
-
-  /** Wrap `name` on `target` so it shares the runaway counter. */
-  const wrap = (target: Record<string, unknown> | undefined, name: string, why: string) => {
-    if (!target || typeof target[name] !== "function") return;
-    const original = target[name] as (this: unknown, ...a: unknown[]) => unknown;
-    target[name] = function guarded(this: Record<string, unknown>, ...args: unknown[]) {
-      if (depth >= MAX_REVERT_DEPTH) {
-        if (!reported) {
-          reported = true;
-          onRunaway?.({ ...describe(this), caughtIn: why });
-        }
-        return this; // stop recursing — un-reverted beats a dead tab
-      }
-      depth++;
-      try {
-        return original.apply(this, args);
-      } finally {
-        depth--;
-      }
-    };
-  };
-
-  wrap(proto, "revert", "Animation.revert");
-  wrap(core?.Timeline?.prototype as Record<string, unknown>, "render", "Timeline.render");
 }

@@ -5,7 +5,6 @@ import { Navbar } from "@/components/Navbar";
 import { PixelReveal } from "@/components/PixelReveal";
 import { CursorDot } from "@/components/CursorDot";
 import { MediaGuard } from "@/components/MediaGuard";
-import { CrashDiag } from "@/components/CrashDiag";
 import { getNavbar } from "@/lib/content";
 
 // (site) layout — the PUBLIC marketing-site chrome. Everything the landing pages
@@ -50,9 +49,6 @@ export default async function SiteLayout({
           and the WebGL canvases — the same "page copy isn't yours to lift" intent
           as the site-wide user-select:none. Public site only; /admin keeps both. */}
       <MediaGuard />
-      {/* TEMPORARY — records a crash-surviving log to localStorage so the
-          /about → Back failure can be diagnosed. Remove once fixed. */}
-      <CrashDiag />
     </>
   );
 }
