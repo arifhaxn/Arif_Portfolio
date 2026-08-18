@@ -17,6 +17,7 @@ import { Flip } from "gsap/Flip";
 import { useGSAP } from "@gsap/react";
 import {
   guardGsapContextCycles,
+  guardGsapContextKillCycles,
   guardGsapRevertRecursion,
 } from "@/lib/gsapContextGuard";
 
@@ -40,6 +41,17 @@ if (typeof window !== "undefined") {
   // makes that traversal unable to loop. It's a safety net over a root cause we
   // haven't pinned down yet, so it also SHOUTS when it catches one — that log is
   // the evidence needed to fix the graph itself rather than just survive it.
+  // THE one that matches the captured stack: Context.kill <-> Context.revert
+  // recursing forever over a cyclic context graph. See lib/gsapContextGuard.
+  guardGsapContextKillCycles(gsap, (info) => {
+    console.error(
+      "[gsap-context-kill-cycle] Re-entered a Context.kill already in progress " +
+        "— a cyclic context graph. Broken instead of overflowing the stack. " +
+        JSON.stringify(info) +
+        ` Route: ${window.location.pathname}`,
+    );
+  });
+
   // The crash that actually reproduces is a runaway Animation.revert recursion
   // (revert → render → revert). Stop it before the stack dies, and report the
   // animation doing it — a stack trace can't, because an overflow keeps only the

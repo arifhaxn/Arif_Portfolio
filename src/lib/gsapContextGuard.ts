@@ -113,6 +113,79 @@ export function guardGsapContextCycles(
   };
 }
 
+/**
+ * THE FIX. Stop `Context.kill` ↔ `Context.revert` recursing forever.
+ *
+ * A 200-frame capture of the real crash ends in this, repeating to the bottom:
+ *
+ *     at e.kill   (chunk:1:45230)
+ *     at e.revert (chunk:1:45656)
+ *     at e.kill   (chunk:1:45423)
+ *     at e.revert (chunk:1:45656)   … forever
+ *
+ * `Context.revert()` is just `this.kill(config)`, and `Context.kill()` walks its
+ * `data` calling `.revert()` on every child context (gsap-core ~L3997:
+ * `!(t instanceof Tween) && t.revert && t.revert(revert)`). So a cycle anywhere
+ * in that graph — A holds B, B holds A — gives A.kill → B.revert → B.kill →
+ * A.revert → A.kill → … and the stack dies, taking the tab with it.
+ *
+ * The cycle is easy to build by accident because `Context.add` (~L3925) does
+ * `prev && prev !== self && prev.data.push(self)` on EVERY invocation, with no
+ * dedupe — it pushes a context into whichever context is active at the time.
+ * `useGSAP(() => { const mm = gsap.matchMedia(); mm.add(...) })`, used in five
+ * components here, is exactly that shape.
+ *
+ * Fix: refuse to re-enter a kill that is already in progress. Killing a context
+ * that is mid-kill is a no-op by definition — it is already being torn down —
+ * so this changes nothing legitimate and removes the ability to loop.
+ *
+ * Note this is a DIFFERENT recursion from the getTweens one above and from the
+ * revert/render depth guard below; each guards a distinct path, and only this
+ * one matches the captured stack.
+ */
+export function guardGsapContextKillCycles(
+  gsap: unknown,
+  onCycle?: (info: Record<string, unknown>) => void,
+): void {
+  const g = gsap as GsapLike;
+  let Context: Ctor;
+  try {
+    const probe = g.context(() => {});
+    Context = probe.constructor as Ctor;
+    probe.revert();
+    if (!Context?.prototype) return;
+  } catch {
+    return;
+  }
+
+  const proto = Context.prototype as Record<string, unknown>;
+  if (proto.__killGuarded || typeof proto.kill !== "function") return;
+  proto.__killGuarded = true;
+
+  const originalKill = proto.kill as (this: unknown, ...a: unknown[]) => unknown;
+  const inFlight = new WeakSet<object>();
+  let reported = false;
+
+  proto.kill = function guardedKill(this: Record<string, unknown>, ...args: unknown[]) {
+    if (inFlight.has(this)) {
+      if (!reported) {
+        reported = true;
+        onCycle?.({
+          dataLength: (this as { data?: unknown[] }).data?.length ?? 0,
+          isReverted: (this as { isReverted?: boolean }).isReverted,
+        });
+      }
+      return this; // already being torn down — re-entering is what loops
+    }
+    inFlight.add(this);
+    try {
+      return originalKill.apply(this, args);
+    } finally {
+      inFlight.delete(this);
+    }
+  };
+}
+
 /** How deep the revert/render cycle may nest before we call it a runaway. A
  *  legitimately nested timeline reverts maybe a dozen levels deep; a runaway
  *  reaches thousands in milliseconds, so 100 separates them with room to spare. */
