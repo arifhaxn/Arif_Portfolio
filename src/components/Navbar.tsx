@@ -47,11 +47,18 @@ export function Navbar({ nav }: { nav: NavbarContent }) {
   // than the corner-driven one: browse the site first, then Contact last, since
   // it's the call to action and not another section to look through. Desktop is
   // untouched — its corners still come from each link's `side`.
-  // Identified by the "#contact" hash, the same way Hero picks it out
-  // (CONTACT_HREF); if that href is ever changed in the admin this quietly falls
-  // back to the authored order instead of dropping or duplicating anything.
-  const isContact = (l: NavbarContent["links"][number]) => l.href.includes("#contact");
-  const sheetLinks = [...nav.links.filter((l) => !isContact(l)), ...nav.links.filter(isContact)];
+  // "Last" is keyed on the link being a deep-link INTO a section (it carries a
+  // #hash) rather than a whole page — deliberately not on its label or href
+  // text. The live site names this link "Career" (/about#career) while local
+  // content calls it "Contact" (/about#contact); matching the literal "#contact"
+  // reordered nothing in production. The structural test holds for both, and for
+  // whatever it gets renamed to in the admin next. With no hash link at all the
+  // sheet simply keeps the authored order — nothing dropped or duplicated.
+  const isSectionLink = (l: NavbarContent["links"][number]) => l.href.includes("#");
+  const sheetLinks = [
+    ...nav.links.filter((l) => !isSectionLink(l)),
+    ...nav.links.filter(isSectionLink),
+  ];
 
   // Mobile menu: the four corner links + centered mark don't fit a phone width,
   // so on <sm the links collapse into a toggle that opens a full-screen sheet.
