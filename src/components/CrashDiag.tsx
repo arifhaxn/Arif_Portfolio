@@ -3,68 +3,81 @@
 // -----------------------------------------------------------------------------
 // CrashDiag — TEMPORARY. Remove once the /about → Back crash is understood.
 // -----------------------------------------------------------------------------
-// Going /about → browser Back kills the page ("This page couldn't load"). Every
-// attempt to diagnose it has failed for the same reason: when the renderer dies
-// it takes the console, the network panel and the JS heap with it, so there is
-// nothing left to read afterwards. Guessing from the outside has now been wrong
-// three times.
+// Going /about → browser Back kills the page ("This page couldn't load"). When
+// the renderer dies it takes the console, the network panel and the heap with
+// it, so there is nothing left to read afterwards. This writes to localStorage,
+// which OUTLIVES a renderer crash.
 //
-// So this writes a running log to localStorage — the one place that OUTLIVES a
-// renderer crash. Reproduce the crash, reload, and the last entries before the
-// tab died are still there, in order, with timestamps.
+// Two things the first attempt got wrong, both of which destroyed the very
+// evidence it existed to capture:
 //
-// It records only what's needed to tell the candidate failures apart:
-//   • route changes (pushState / replaceState / popstate) — so we can see how
-//     far the Back navigation got before it died,
-//   • WebGL context create / lost / restored, with a running LIVE count — a GPU
-//     context exhaustion looks completely different here from a JS error,
-//   • uncaught errors and promise rejections, with stack,
-//   • JS heap size at each step, for an out-of-memory pattern,
-//   • a 500ms heartbeat — if the log simply STOPS mid-navigation with no error,
-//     that itself is the finding: the process was killed rather than throwing.
+//   1. The heartbeat shared one ring buffer with the real events. After the
+//      crash you reload, the page sits there beating twice a second, and within
+//      ~75s every meaningful entry has been evicted by its own heartbeat — the
+//      first capture came back as 150 beats and nothing else. So beats are no
+//      longer entries at all: only the LAST one is kept, which is all that
+//      "when was the page last alive" actually needs.
+//   2. The reloaded session wrote into the same key as the crashed one. The
+//      crashed session is the only one that matters, so on startup the previous
+//      session is moved aside to `__diag_prev` and then left strictly alone.
 //
-// Deliberately tiny and synchronous: a batched or async writer would lose the
-// final entries, which are the only ones that matter.
+// `__diag()` prints the CRASHED session first, for that reason.
+//
+// Reading it: compare `lastBeat.t` against the final event's `t`. If the events
+// stop at POPSTATE and lastBeat is right there with them, the process was killed
+// outright — which rules out every JS-level explanation at once. If `gl-create`
+// outnumbers `gl-LOST`, it's context exhaustion. If an ERROR landed, we get the
+// stack. Those three are indistinguishable from outside the page.
 // -----------------------------------------------------------------------------
 
 import { useEffect } from "react";
 
 const KEY = "__diag";
-const MAX = 150; // ring buffer — keep the tail, that's where the crash is
+const PREV = "__diag_prev";
+const MAX_EVENTS = 150; // real events only — beats are not entries
+
+type Entry = { t: number; e: string; d?: Record<string, unknown> };
+type Store = { events: Entry[]; lastBeat: Entry | null };
 
 export function CrashDiag() {
   useEffect(() => {
-    type Entry = { t: number; e: string; d?: unknown };
-    let log: Entry[] = [];
+    // Preserve the session that just died before recording over it.
     try {
-      log = JSON.parse(localStorage.getItem(KEY) || "[]");
+      const prior = localStorage.getItem(KEY);
+      if (prior && prior !== "null") localStorage.setItem(PREV, prior);
     } catch {
-      log = [];
+      /* private mode — nothing useful to do */
     }
 
+    const store: Store = { events: [], lastBeat: null };
     const t0 = performance.now();
     let live = 0;
 
-    const flush = () => {
-      try {
-        localStorage.setItem(KEY, JSON.stringify(log.slice(-MAX)));
-      } catch {
-        /* quota / private mode — nothing useful to do */
-      }
-    };
-    const rec = (e: string, d?: unknown) => {
+    const stamp = (e: string, d?: Record<string, unknown>): Entry => {
       const mem = (performance as { memory?: { usedJSHeapSize: number } }).memory;
-      log.push({
+      return {
         t: Math.round(performance.now() - t0),
         e,
         d: {
-          ...(typeof d === "object" && d !== null ? d : d !== undefined ? { v: d } : {}),
+          ...(d || {}),
           path: location.pathname,
           live,
           ...(mem ? { heapMB: Math.round(mem.usedJSHeapSize / 1048576) } : {}),
         },
-      });
-      flush(); // synchronous: the LAST entry is the one that matters
+      };
+    };
+    const flush = () => {
+      try {
+        localStorage.setItem(KEY, JSON.stringify(store));
+      } catch {
+        /* quota */
+      }
+    };
+    // Real events are never evicted by beats now.
+    const rec = (e: string, d?: Record<string, unknown>) => {
+      store.events.push(stamp(e, d));
+      if (store.events.length > MAX_EVENTS) store.events.shift();
+      flush(); // synchronous — the LAST entry is the one that matters
     };
 
     rec("session-start", { ua: navigator.userAgent.slice(0, 90) });
@@ -91,7 +104,7 @@ export function CrashDiag() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
 
-    // --- Routing --------------------------------------------------------------
+    // --- Routing + failures ---------------------------------------------------
     const origPush = history.pushState;
     const origReplace = history.replaceState;
     history.pushState = function (...a: Parameters<typeof origPush>) {
@@ -104,7 +117,10 @@ export function CrashDiag() {
     };
     const onPop = () => rec("POPSTATE (Back)");
     const onErr = (ev: ErrorEvent) =>
-      rec("ERROR", { msg: ev.message, stack: String(ev.error?.stack || "").slice(0, 600) });
+      rec("ERROR", {
+        msg: ev.message,
+        stack: String(ev.error?.stack || "").slice(0, 700),
+      });
     const onRej = (ev: PromiseRejectionEvent) =>
       rec("REJECTION", { reason: String(ev.reason).slice(0, 400) });
     const onHide = () => rec("pagehide");
@@ -116,17 +132,27 @@ export function CrashDiag() {
     window.addEventListener("pagehide", onHide);
     document.addEventListener("visibilitychange", onVis);
 
-    // Heartbeat — a log that stops dead mid-navigation means the process was
-    // killed outright rather than throwing anything catchable.
-    const beat = setInterval(() => rec("beat"), 500);
+    // Heartbeat: only ever the most recent one is kept, so it cannot drown the
+    // events the way the first version did.
+    const beat = setInterval(() => {
+      store.lastBeat = stamp("beat");
+      flush();
+    }, 500);
 
-    // Console helpers for reading it back after the crash.
     Object.assign(window as object, {
       __diag: () => {
-        console.log(localStorage.getItem(KEY));
-        return JSON.parse(localStorage.getItem(KEY) || "[]");
+        const prev = localStorage.getItem(PREV);
+        const cur = localStorage.getItem(KEY);
+        console.log(
+          "=== CRASHED SESSION (the one that matters) ===\n" + (prev ?? "(none)"),
+        );
+        console.log("=== CURRENT SESSION ===\n" + (cur ?? "(none)"));
+        return { prev: JSON.parse(prev || "null"), current: JSON.parse(cur || "null") };
       },
-      __diagClear: () => localStorage.removeItem(KEY),
+      __diagClear: () => {
+        localStorage.removeItem(KEY);
+        localStorage.removeItem(PREV);
+      },
     });
 
     return () => {
