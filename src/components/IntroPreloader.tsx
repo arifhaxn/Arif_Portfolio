@@ -60,38 +60,71 @@ export function IntroPreloader() {
       };
     }
 
+    // Every animation started below has to be killed when this unmounts. None of
+    // them live in a GSAP context: the ones inside the delayedCall are created
+    // LATER, on a timer, long after the effect body has finished, so a context
+    // would not capture them either. Left alive they outlive the page — still
+    // holding the overlay and logo nodes, and the saved inline styles CSSPlugin
+    // restores on revert — and the landing page is remounted every time you come
+    // back to it. That is the shape behind the "This page couldn't load" crash:
+    // a stack overflow through Animation.revert → render → CSSPlugin's style
+    // saver, with Flip (used only here on this page) in the loop.
+    const spawned: gsap.core.Animation[] = [];
+    const track = <T extends gsap.core.Animation | null | undefined>(a: T): T => {
+      if (a) spawned.push(a);
+      return a;
+    };
+
     // Full intro: wipe the big logo in top→bottom, hold, then shrink + dock into
     // the navbar while the black clears.
-    gsap.fromTo(
-      logo,
-      { clipPath: "inset(0 0 100% 0)" },
-      { clipPath: "inset(0 0 0% 0)", duration: INTRO.reveal, ease: "power2.out" },
+    track(
+      gsap.fromTo(
+        logo,
+        { clipPath: "inset(0 0 100% 0)" },
+        { clipPath: "inset(0 0 0% 0)", duration: INTRO.reveal, ease: "power2.out" },
+      ),
     );
     const run = gsap.delayedCall(INTRO.reveal + INTRO.hold, () => {
       // Shrink + travel the logo onto the (settled) navbar logo.
-      Flip.fit(logo, navLogo, { duration: INTRO.dock, ease: INTRO.ease, scale: true });
+      track(
+        Flip.fit(logo, navLogo, {
+          duration: INTRO.dock,
+          ease: INTRO.ease,
+          scale: true,
+        }) as gsap.core.Animation | null,
+      );
       // Reveal the page as it docks: fade only the black background (the logo
       // stays visible), and fire the hero entrance as it starts clearing.
-      gsap.to(overlay, {
-        backgroundColor: "rgba(0,0,0,0)",
-        duration: INTRO.fade,
-        ease: "power2.inOut",
-        delay: INTRO.dock * 0.45,
-        onStart: reveal,
-      });
+      track(
+        gsap.to(overlay, {
+          backgroundColor: "rgba(0,0,0,0)",
+          duration: INTRO.fade,
+          ease: "power2.inOut",
+          delay: INTRO.dock * 0.45,
+          onStart: reveal,
+        }),
+      );
       // Hand off: the docked logo fades out onto the now-visible navbar logo,
       // then the cover is removed.
-      gsap.to(logo, {
-        autoAlpha: 0,
-        duration: 0.25,
-        delay: INTRO.dock - 0.05,
-        onComplete: () => {
-          overlay.style.display = "none";
-        },
-      });
+      track(
+        gsap.to(logo, {
+          autoAlpha: 0,
+          duration: 0.25,
+          delay: INTRO.dock - 0.05,
+          onComplete: () => {
+            overlay.style.display = "none";
+          },
+        }),
+      );
     });
     return () => {
       run.kill();
+      // Kill outright rather than revert: these targets are being removed from
+      // the document anyway, and reverting is the code path that was blowing the
+      // stack. Also drop any saved inline styles GSAP is still holding for them.
+      spawned.forEach((a) => a.kill());
+      spawned.length = 0;
+      gsap.killTweensOf([logo, overlay]);
     };
   }, [pathname]);
 
