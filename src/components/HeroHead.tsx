@@ -51,6 +51,7 @@ import {
   type Group,
   type MeshBasicMaterial,
   type Points,
+  type WebGLRenderer,
 } from "three";
 import {
   armBreathe,
@@ -1260,6 +1261,39 @@ export function HeroHead({
     return () => stop();
   }, []);
 
+  // --- Release the GPU context the moment this canvas leaves the document ----
+  // R3F frees the WebGL context on a 500ms setTimeout after unmount. A client
+  // route change is far quicker than that, so the OUTGOING page's context is
+  // still alive while the incoming page builds its own. That overlap is normally
+  // harmless — except on one transition: /about ↔ the landing page is the only
+  // pair where BOTH sides mount the 50K-triangle robot, and /about is also
+  // tearing down Tesseract's context and its large 2D canvases at the same
+  // moment. Going TO /about the exit-scan spreads that over ~1.2s; browser BACK
+  // has no scan, so the whole teardown and rebuild land together — which is
+  // exactly the navigation that kills the tab.
+  // Releasing eagerly means the two robots never hold contexts simultaneously.
+  // The isConnected check runs on a macrotask, after React has committed, so
+  // StrictMode's mount → unmount → remount doesn't kill a context it's about to
+  // reuse; a real unmount leaves the canvas detached and frees it.
+  const glRef = useRef<WebGLRenderer | null>(null);
+  useEffect(
+    () => () => {
+      const gl = glRef.current;
+      glRef.current = null;
+      if (!gl) return;
+      setTimeout(() => {
+        if (gl.domElement.isConnected) return; // remounted — keep the context
+        try {
+          gl.forceContextLoss();
+        } catch {
+          /* already lost — nothing to release */
+        }
+        gl.dispose();
+      }, 0);
+    },
+    [],
+  );
+
   // Pause the render loop when the wrapper is scrolled out of view.
   useEffect(() => {
     const el = wrapper.current;
@@ -1292,6 +1326,11 @@ export function HeroHead({
           // powerPreference nudges the browser to pick the discrete GPU where one
           // exists (no-op on integrated-only machines) — a free win, no visual change.
           gl={{ antialias: q.antialias, alpha: true, powerPreference: "high-performance" }}
+          // Keep the renderer so unmount can release its context immediately
+          // rather than waiting out R3F's 500ms timer (see glRef above).
+          onCreated={({ gl }) => {
+            glRef.current = gl as WebGLRenderer;
+          }}
         >
           {/* Runtime FPS guard: steps the pixel ratio down if a mis-detected
               device still stutters. Never raises it, so capable machines are
