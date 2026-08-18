@@ -62,7 +62,16 @@ export function Hero({ hero }: { hero: HeroContent }) {
   const goAbout = useCallback(() => {
     if (navigating.current) return;
     navigating.current = true;
-    void headScan.playExitAll().then(() => router.push(ABOUT_HREF));
+    void headScan
+      .playExitAll()
+      .then(() => router.push(ABOUT_HREF))
+      // If the scan or the route change fails we'd otherwise latch `navigating`
+      // on forever and the robot would go permanently dead to taps — with the
+      // figure already scanned out and no way back. Release it so a second tap
+      // can retry.
+      .catch(() => {
+        navigating.current = false;
+      });
   }, [headScan, router]);
 
   // Keep the nameplate hidden until the intro reveals the page, so the fade/rise
