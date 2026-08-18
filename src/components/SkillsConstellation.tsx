@@ -434,9 +434,18 @@ function SkillGraphCanvas({ skills, logo }: { skills: SkillGroup[]; logo: string
       }
     };
 
+    // Ceiling on DEVICE pixels per DESIGN pixel for the backing store. Capping
+    // the PRODUCT (dpr × UI scale) rather than dpr alone is what keeps this
+    // canvas the same size in memory on every display: the UI scale already
+    // magnifies the artwork, so a screen 1.78× scaled at dpr 2 was allocating
+    // 4096×2792 — ~44 MB for this one canvas, 3.2× what it took before the scale
+    // existed — for no extra detail per design unit. At 2 the sharpness relative
+    // to the artwork is exactly what it was pre-scale, and small screens (scale 1)
+    // are completely unaffected: the cap is then just the old `min(dpr, 2)`.
+    const MAX_DEVICE_PX_PER_DESIGN_PX = 2;
+
     const resize = () => {
       const rect = wrap.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       // Every number in this graph — node radii, label font sizes, the GAP/CLEAR
       // relaxation distances, the canvas height ramp — is a raw pixel literal, so
       // on a big monitor the whole constellation would have stayed 1920-sized
@@ -447,6 +456,10 @@ function SkillGraphCanvas({ skills, logo }: { skills: SkillGroup[]; logo: string
       // `W >= 1024` height branch and the collision relaxation now see identical
       // inputs on a 1920 and a 2560 screen, so the graph's SHAPE is stable too.
       const S = uiScale();
+      const dpr = Math.min(
+        window.devicePixelRatio || 1,
+        MAX_DEVICE_PX_PER_DESIGN_PX / S,
+      );
       W = Math.max(1, rect.width / S);
       // canvas grows taller as branches are added, so there's always room
       const total = 1 + skills.length + totalSkills;
