@@ -34,7 +34,7 @@ import { useEffect } from "react";
 
 const KEY = "__diag";
 const PREV = "__diag_prev";
-const MAX_EVENTS = 150; // real events only — beats are not entries
+const MAX_EVENTS = 60; // real events only — beats are not entries (room for long stacks)
 
 type Entry = { t: number; e: string; d?: Record<string, unknown> };
 type Store = { events: Entry[]; lastBeat: Entry | null };
@@ -80,7 +80,10 @@ export function CrashDiag() {
       flush(); // synchronous — the LAST entry is the one that matters
     };
 
-    rec("session-start", { ua: navigator.userAgent.slice(0, 90) });
+    rec("session-start", {
+      build: process.env.NEXT_PUBLIC_BUILD_SHA || "unknown",
+      ua: navigator.userAgent.slice(0, 60),
+    });
 
     // --- WebGL contexts -------------------------------------------------------
     const origGetContext = HTMLCanvasElement.prototype.getContext;
@@ -119,7 +122,7 @@ export function CrashDiag() {
     const onErr = (ev: ErrorEvent) =>
       rec("ERROR", {
         msg: ev.message,
-        stack: String(ev.error?.stack || "").slice(0, 700),
+        stack: String(ev.error?.stack || "").slice(0, 6000),
       });
     const onRej = (ev: PromiseRejectionEvent) =>
       rec("REJECTION", { reason: String(ev.reason).slice(0, 400) });

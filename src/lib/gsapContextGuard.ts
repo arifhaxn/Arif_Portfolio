@@ -112,3 +112,76 @@ export function guardGsapContextCycles(
     return out;
   };
 }
+
+/** How deep Animation.revert may nest before we call it a runaway. Real GSAP
+ *  trees are a handful of levels; 60 is far past anything legitimate. */
+const MAX_REVERT_DEPTH = 60;
+
+/**
+ * Break — and identify — a runaway `Animation.revert` recursion.
+ *
+ * The captured crash is a stack overflow whose repeating unit is
+ * `revert → totalTime → render → render → styleSaver.revert`, i.e. reverting an
+ * animation renders something that reverts again, forever. A stack trace can't
+ * name the culprit: an overflow stack is thousands of frames deep and the
+ * browser only keeps the innermost ~50, so the frame identifying OUR animation
+ * is always below the cut. The only way to see it is to catch the recursion
+ * while it is still shallow enough to inspect.
+ *
+ * So: count re-entrancy, and at the limit stop recursing (returning the
+ * animation un-reverted, which beats a dead tab) and hand the offending
+ * animation to `onRunaway` — described, since by then we have it in hand.
+ *
+ * @param onRunaway called once per page life, with a description of the
+ *                  animation that was looping.
+ */
+export function guardGsapRevertRecursion(
+  gsap: unknown,
+  onRunaway?: (info: Record<string, unknown>) => void,
+): void {
+  const core = (gsap as { core?: { Animation?: Ctor } }).core;
+  const Animation = core?.Animation;
+  const proto = Animation?.prototype as Record<string, unknown> | undefined;
+  if (!proto || typeof proto.revert !== "function" || proto.__revertGuarded) return;
+  proto.__revertGuarded = true;
+
+  const original = proto.revert as (this: unknown, config?: unknown) => unknown;
+  let depth = 0;
+  let reported = false;
+
+  proto.revert = function guardedRevert(this: Record<string, unknown>, config?: unknown) {
+    if (depth >= MAX_REVERT_DEPTH) {
+      if (!reported) {
+        reported = true;
+        const targets = (this as { targets?: () => unknown[] }).targets;
+        let described: string[] = [];
+        try {
+          described = (typeof targets === "function" ? targets.call(this) : [])
+            .slice(0, 4)
+            .map((t) =>
+              t instanceof Element
+                ? `${t.tagName.toLowerCase()}.${String(t.className).slice(0, 40)}` +
+                  (t.isConnected ? "" : " [DETACHED]")
+                : Object.prototype.toString.call(t),
+            );
+        } catch {
+          /* targets() isn't available on every animation type */
+        }
+        onRunaway?.({
+          kind: this?.constructor?.name,
+          data: String((this as { data?: unknown }).data ?? ""),
+          vars: Object.keys(((this as { vars?: object }).vars || {}) as object).slice(0, 12),
+          targets: described,
+          depth,
+        });
+      }
+      return this; // stop recursing — an un-reverted animation beats a dead tab
+    }
+    depth++;
+    try {
+      return original.call(this, config);
+    } finally {
+      depth--;
+    }
+  };
+}

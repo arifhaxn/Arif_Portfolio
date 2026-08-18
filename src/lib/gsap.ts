@@ -15,7 +15,10 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Observer } from "gsap/Observer";
 import { Flip } from "gsap/Flip";
 import { useGSAP } from "@gsap/react";
-import { guardGsapContextCycles } from "@/lib/gsapContextGuard";
+import {
+  guardGsapContextCycles,
+  guardGsapRevertRecursion,
+} from "@/lib/gsapContextGuard";
 
 // Register plugins only on the client. In the App Router this file can be pulled
 // into the server graph, so we must not touch browser-only plugin internals there.
@@ -37,6 +40,19 @@ if (typeof window !== "undefined") {
   // makes that traversal unable to loop. It's a safety net over a root cause we
   // haven't pinned down yet, so it also SHOUTS when it catches one — that log is
   // the evidence needed to fix the graph itself rather than just survive it.
+  // The crash that actually reproduces is a runaway Animation.revert recursion
+  // (revert → render → revert). Stop it before the stack dies, and report the
+  // animation doing it — a stack trace can't, because an overflow keeps only the
+  // innermost frames and our own are far below them.
+  guardGsapRevertRecursion(gsap, (info) => {
+    console.error(
+      "[gsap-revert-runaway] Animation.revert recursed past the limit and was " +
+        "stopped before it could overflow the stack. Offending animation: " +
+        JSON.stringify(info) +
+        ` Route: ${window.location.pathname}`,
+    );
+  });
+
   guardGsapContextCycles(gsap, ({ skipped, rootDataLength }) => {
     console.error(
       `[gsap-context-cycle] Skipped ${skipped} repeat context visit(s) while ` +
