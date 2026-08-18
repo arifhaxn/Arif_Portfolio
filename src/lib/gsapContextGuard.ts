@@ -113,9 +113,10 @@ export function guardGsapContextCycles(
   };
 }
 
-/** How deep Animation.revert may nest before we call it a runaway. Real GSAP
- *  trees are a handful of levels; 60 is far past anything legitimate. */
-const MAX_REVERT_DEPTH = 60;
+/** How deep the revert/render cycle may nest before we call it a runaway. A
+ *  legitimately nested timeline reverts maybe a dozen levels deep; a runaway
+ *  reaches thousands in milliseconds, so 100 separates them with room to spare. */
+const MAX_REVERT_DEPTH = 100;
 
 /**
  * Break — and identify — a runaway `Animation.revert` recursion.
@@ -139,49 +140,66 @@ export function guardGsapRevertRecursion(
   gsap: unknown,
   onRunaway?: (info: Record<string, unknown>) => void,
 ): void {
-  const core = (gsap as { core?: { Animation?: Ctor } }).core;
-  const Animation = core?.Animation;
-  const proto = Animation?.prototype as Record<string, unknown> | undefined;
+  const core = (gsap as {
+    core?: { Animation?: Ctor; Timeline?: Ctor; Tween?: Ctor };
+  }).core;
+  const proto = core?.Animation?.prototype as Record<string, unknown> | undefined;
   if (!proto || typeof proto.revert !== "function" || proto.__revertGuarded) return;
   proto.__revertGuarded = true;
 
-  const original = proto.revert as (this: unknown, config?: unknown) => unknown;
+  // ONE depth shared by revert and render. The captured stack cycles between
+  // them — revert → totalTime → render → render → styleSaver.revert — so a
+  // counter on either method alone can sit at 1 forever while the other spins.
+  // Render is also where a Flip timeline's own revert() override lands, which
+  // shadows this prototype and would otherwise slip past entirely.
   let depth = 0;
   let reported = false;
 
-  proto.revert = function guardedRevert(this: Record<string, unknown>, config?: unknown) {
-    if (depth >= MAX_REVERT_DEPTH) {
-      if (!reported) {
-        reported = true;
-        const targets = (this as { targets?: () => unknown[] }).targets;
-        let described: string[] = [];
-        try {
-          described = (typeof targets === "function" ? targets.call(this) : [])
-            .slice(0, 4)
-            .map((t) =>
-              t instanceof Element
-                ? `${t.tagName.toLowerCase()}.${String(t.className).slice(0, 40)}` +
-                  (t.isConnected ? "" : " [DETACHED]")
-                : Object.prototype.toString.call(t),
-            );
-        } catch {
-          /* targets() isn't available on every animation type */
-        }
-        onRunaway?.({
-          kind: this?.constructor?.name,
-          data: String((this as { data?: unknown }).data ?? ""),
-          vars: Object.keys(((this as { vars?: object }).vars || {}) as object).slice(0, 12),
-          targets: described,
-          depth,
-        });
-      }
-      return this; // stop recursing — an un-reverted animation beats a dead tab
-    }
-    depth++;
+  const describe = (a: Record<string, unknown>) => {
+    const targets = (a as { targets?: () => unknown[] }).targets;
+    let described: string[] = [];
     try {
-      return original.call(this, config);
-    } finally {
-      depth--;
+      described = (typeof targets === "function" ? targets.call(a) : [])
+        .slice(0, 4)
+        .map((t) =>
+          t instanceof Element
+            ? `${t.tagName.toLowerCase()}.${String(t.className).slice(0, 40)}` +
+              (t.isConnected ? "" : " [DETACHED]")
+            : Object.prototype.toString.call(t),
+        );
+    } catch {
+      /* targets() isn't available on every animation type */
     }
+    return {
+      kind: a?.constructor?.name,
+      data: String((a as { data?: unknown }).data ?? ""),
+      vars: Object.keys(((a as { vars?: object }).vars || {}) as object).slice(0, 12),
+      targets: described,
+      depth,
+    };
   };
+
+  /** Wrap `name` on `target` so it shares the runaway counter. */
+  const wrap = (target: Record<string, unknown> | undefined, name: string, why: string) => {
+    if (!target || typeof target[name] !== "function") return;
+    const original = target[name] as (this: unknown, ...a: unknown[]) => unknown;
+    target[name] = function guarded(this: Record<string, unknown>, ...args: unknown[]) {
+      if (depth >= MAX_REVERT_DEPTH) {
+        if (!reported) {
+          reported = true;
+          onRunaway?.({ ...describe(this), caughtIn: why });
+        }
+        return this; // stop recursing — un-reverted beats a dead tab
+      }
+      depth++;
+      try {
+        return original.apply(this, args);
+      } finally {
+        depth--;
+      }
+    };
+  };
+
+  wrap(proto, "revert", "Animation.revert");
+  wrap(core?.Timeline?.prototype as Record<string, unknown>, "render", "Timeline.render");
 }

@@ -49,6 +49,11 @@ export function CrashDiag() {
       /* private mode — nothing useful to do */
     }
 
+    // Chrome keeps only the innermost 10 frames by default, which is why the
+    // captured stacks stopped short of the actual recursion. Ask for far more.
+    const prevStackLimit = Error.stackTraceLimit;
+    Error.stackTraceLimit = 200;
+
     const store: Store = { events: [], lastBeat: null };
     const t0 = performance.now();
     let live = 0;
@@ -159,6 +164,7 @@ export function CrashDiag() {
     });
 
     return () => {
+      Error.stackTraceLimit = prevStackLimit;
       clearInterval(beat);
       window.removeEventListener("popstate", onPop);
       window.removeEventListener("error", onErr);
