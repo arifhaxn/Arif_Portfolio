@@ -20,6 +20,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useGSAP } from "@/lib/gsap";
 import { navIntro } from "@/lib/animations";
+import { isRevealed, onReveal } from "@/lib/introControl";
+import { INTRO } from "@/lib/motion";
 import { ScrambleText } from "@/components/ScrambleText";
 import { useHeadScan } from "@/components/providers/HeadScanProvider";
 import { getLenis } from "@/components/providers/SmoothScrollProvider";
@@ -122,6 +124,45 @@ export function Navbar({ nav }: { nav: NavbarContent }) {
     { scope: root },
   );
 
+  // Idle bob on the centred mark. It's a CSS class rather than a tween, and it's
+  // added LATE rather than at mount, because this element has two other owners:
+  //   • navIntro animates the <Link> ([data-nav-item]) on load, and the Link also
+  //     carries the -translate-x-1/2 that centres it — so the bob lives on the
+  //     inner <img>, whose transform nothing else touches.
+  //   • IntroPreloader measures this exact <img> with Flip.fit to dock the big
+  //     intro logo onto it. Measuring a moving target lands the dock off by the
+  //     bob's offset, so it stays still until that handoff is done.
+  // On an SPA return there's no intro to wait for (isRevealed is already true),
+  // so it starts on the next frame instead. Reduced motion and the low quality
+  // tier switch it off in globals.css, like the other ambient loops.
+  const [bob, setBob] = useState(false);
+  useEffect(() => {
+    const start = () => setBob(true);
+    if (isRevealed()) {
+      start();
+      return;
+    }
+    let afterDock = 0;
+    const stop = onReveal(() => {
+      // `reveal` fires partway THROUGH the dock, so wait out the remainder.
+      afterDock = window.setTimeout(start, INTRO.dock * 1000);
+    });
+    // Nothing guarantees a reveal ever happens: claimIntro() is called only by
+    // IntroPreloader, which mounts only on "/". Load /about (or any other route)
+    // directly and reveal() is never called at all — so waiting on it alone would
+    // strand the bob permanently off on every entry point except the homepage.
+    // Start regardless once the longest possible intro has elapsed; whichever
+    // path wins, setBob(true) twice is a no-op.
+    const longestIntro =
+      (INTRO.reveal + INTRO.hold + INTRO.dock + INTRO.fade) * 1000;
+    const fallback = window.setTimeout(start, longestIntro);
+    return () => {
+      stop();
+      window.clearTimeout(afterDock);
+      window.clearTimeout(fallback);
+    };
+  }, []);
+
   return (
     <>
       <header
@@ -163,7 +204,7 @@ export function Navbar({ nav }: { nav: NavbarContent }) {
             width={56}
             height={56}
             priority
-            className="h-11 w-11 object-contain"
+            className={`h-11 w-11 object-contain ${bob ? "nav-mark-float" : ""}`}
           />
         </Link>
 

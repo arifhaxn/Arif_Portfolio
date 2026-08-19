@@ -217,6 +217,26 @@ html.cursor-none * {
   animation: thumbFloat 6s ease-in-out infinite;
 }
 
+/* Navbar mark — a slow idle bob, so the centred logo breathes rather than sits
+   dead. Applied to the <img>, never to its <Link>: the Link owns the
+   -translate-x-1/2 that centres it AND is the [data-nav-item] that navIntro
+   animates on load, so putting a transform there would fight both.
+   Kept small (3px) and slow on purpose — it sits behind the intro logo's Flip
+   dock, and a large amplitude would make that handoff visibly miss. The class
+   is only added once the dock has finished (see Navbar). */
+@keyframes navMarkFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+.nav-mark-float {
+  animation: navMarkFloat 4.5s ease-in-out infinite;
+}
+
 .circuit-flow {
   stroke-dasharray: 0.14 0.86;
   stroke-dashoffset: 0;
@@ -262,6 +282,7 @@ html.cursor-none * {
 
 @media (prefers-reduced-motion: reduce) {
   .thumb-float,
+  .nav-mark-float,
   .thumb-glow,
   .circuit-node,
   .scroll-cue-line {
@@ -281,6 +302,7 @@ html.cursor-none * {
    same way reduced-motion does: the circuit BOARD and pads still render (static),
    the cards still sit and glow — only the continuous repainting stops. Mid/high
    are untouched and animate exactly as before. */
+:root[data-quality-tier="low"] .nav-mark-float,
 :root[data-quality-tier="low"] .thumb-float,
 :root[data-quality-tier="low"] .thumb-glow,
 :root[data-quality-tier="low"] .circuit-node,
