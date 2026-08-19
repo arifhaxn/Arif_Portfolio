@@ -11,6 +11,13 @@
 // no canvas or WebGL — which is why this is built around the logo mark rather
 // than the site's 3D robot.
 //
+// CENTRE-SAFE BY REQUIREMENT. Platforms crop this very differently: LinkedIn, X
+// and Discord show the full 1.91:1 frame, but WhatsApp center-crops to a SQUARE
+// thumbnail. A left-aligned composition looked right in the wide frame and got
+// sliced to "RIF / ASAN" in WhatsApp. So the identity — mark, name, role — is
+// centred and kept inside the middle 630px square (x 285…915), and only the
+// bloom and the outer ends of the bottom rail are allowed to fall outside it.
+//
 // Copy comes from content/hero in Firestore, the same source the landing page
 // reads, so editing the name or the eyebrow in /admin/hero updates the share
 // card on the next deploy instead of leaving it to drift.
@@ -41,6 +48,18 @@ export default async function Image() {
 
   return new ImageResponse(
     (
+      // The accent bloom is painted as the FRAME'S OWN BACKGROUND rather than as
+      // an absolutely-positioned child. An oversized absolute div was only ever
+      // rendering as a 72px band across the top: Satori's handling of a large
+      // negatively-offset absolute box doesn't match the browser's, and a clean
+      // rebuild proved the output byte-identical no matter how that child was
+      // repositioned. A background gradient is unambiguous and needs no extra
+      // element.
+      //
+      // The stops are OPAQUE colours ending at the ink, not fades to
+      // transparent. A radial alpha fade over near-black banded hard here —
+      // adjacent rows stepping 27/765, plainly a visible edge — while solid
+      // stops interpolate cleanly.
       <div
         style={{
           width: "100%",
@@ -48,48 +67,50 @@ export default async function Image() {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          background: INK,
           padding: "72px 80px",
-          position: "relative",
+          background: `radial-gradient(circle at 50% -6%, #16253c 0%, #0b1424 28%, ${INK} 62%)`,
         }}
       >
-        {/* Soft accent bloom behind the mark, echoing the robot's glow on the
-            landing page. A radial gradient is one of the few paint effects
-            Satori handles reliably. */}
-        <div
-          style={{
-            position: "absolute",
-            top: -520,
-            right: -420,
-            width: 1500,
-            height: 1500,
-            // Deliberately much larger than the area it tints. A radial fade on
-            // a near-black ground bands hard — the first attempt stepped 24/765
-            // in one row, plainly visible. Spreading the same falloff across
-            // roughly three times the distance drops each step below the
-            // threshold where the eye reads it as an edge. Clipped to a circle
-            // so the box itself can never show a corner.
-            background: `radial-gradient(circle, rgba(59,130,246,0.20) 0%, rgba(59,130,246,0.07) 34%, rgba(59,130,246,0) 66%)`,
-            borderRadius: "50%",
-            display: "flex",
-          }}
-        />
-
-        {/* Top rail: the mark, and the role opposite it. */}
+        {/* Identity stack, centred so it survives a square crop intact. */}
         <div
           style={{
             display: "flex",
+            flexDirection: "column",
             alignItems: "center",
-            justifyContent: "space-between",
+            flexGrow: 1,
+            justifyContent: "center",
           }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={logoSrc} alt="" width={96} height={96} />
+          <img src={logoSrc} alt="" width={92} height={92} />
+
+          {/* Each name word on its own line: stacked, both words clear the
+              630px square with room to spare, and it echoes the site's hero
+              where the name breaks the same way. */}
+          {hero.name.split(/\s+/).map((word) => (
+            <div
+              key={word}
+              style={{
+                display: "flex",
+                fontFamily: "Relidux",
+                fontSize: 118,
+                lineHeight: 1.02,
+                letterSpacing: "0.02em",
+                textTransform: "uppercase",
+                color: "#ffffff",
+                marginTop: word === hero.name.split(/\s+/)[0] ? 30 : 0,
+              }}
+            >
+              {word}
+            </div>
+          ))}
+
           <div
             style={{
               display: "flex",
-              fontSize: 22,
-              letterSpacing: "0.28em",
+              marginTop: 26,
+              fontSize: 25,
+              letterSpacing: "0.3em",
               textTransform: "uppercase",
               color: ACCENT,
             }}
@@ -98,44 +119,30 @@ export default async function Image() {
           </div>
         </div>
 
-        {/* The name, in the site's own display face. */}
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <div
-            style={{
-              display: "flex",
-              fontFamily: "Relidux",
-              fontSize: 156,
-              lineHeight: 1,
-              letterSpacing: "0.02em",
-              textTransform: "uppercase",
-              color: "#ffffff",
-            }}
-          >
-            {hero.name}
-          </div>
-        </div>
-
-        {/* Bottom rail: hairline, then the standing detail line. */}
+        {/* Bottom rail. Centred as one run so the square crop keeps it readable
+            rather than showing two orphaned fragments. */}
         <div style={{ display: "flex", flexDirection: "column" }}>
           <div
             style={{
               display: "flex",
               height: 1,
-              background: "rgba(255,255,255,0.14)",
-              marginBottom: 26,
+              background: "rgba(255,255,255,0.12)",
+              marginBottom: 24,
             }}
           />
           <div
             style={{
               display: "flex",
-              justifyContent: "space-between",
-              fontSize: 24,
+              justifyContent: "center",
+              gap: 20,
+              fontSize: 22,
               letterSpacing: "0.16em",
               textTransform: "uppercase",
               color: "#8b8b95",
             }}
           >
             <div style={{ display: "flex" }}>{hero.hud.locationLabel}</div>
+            <div style={{ display: "flex", color: ACCENT }}>·</div>
             <div style={{ display: "flex" }}>{hero.tagline.primary}</div>
           </div>
         </div>
