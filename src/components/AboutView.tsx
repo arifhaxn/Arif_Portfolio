@@ -42,6 +42,7 @@ import type {
   CareerContent,
   FooterContent,
   HeroContent,
+  ProfileFact,
 } from "@/lib/content-types";
 
 const HeroHead = dynamic(
@@ -52,6 +53,19 @@ const HeroHead = dynamic(
 // Layout effect on the client (runs before paint), plain effect on the server.
 const useIsoLayoutEffect =
   typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
+// Seed for the profile readout, used only while content/about has no `profile`
+// array yet. The field postdates the existing Firestore document and there is no
+// defaults layer (contentGetter returns the doc raw), so without this the rows
+// would render empty until someone edited the admin. Every value here is lifted
+// from the bio copy that was already on the page, so nothing is invented. Fill
+// the list in at /admin/about and it takes over completely; this is then ignored.
+const PROFILE_FALLBACK: ProfileFact[] = [
+  { label: "Based", value: "Sylhet, Bangladesh" },
+  { label: "Degree", value: "BSc Computer Science & Engineering" },
+  { label: "Builds", value: "Mobile-first products" },
+  { label: "Stack", value: "Flutter, Dart, Node.js, Firebase, MongoDB" },
+];
 
 export function AboutView({
   about,
@@ -169,6 +183,9 @@ export function AboutView({
       window.removeEventListener("keydown", markScrolled);
     };
   }, []);
+
+  // Admin-authored rows win; the seed only covers the gap until they exist.
+  const profileFacts = about.profile?.length ? about.profile : PROFILE_FALLBACK;
 
   return (
     <main ref={root} className="bg-black text-white">
@@ -297,9 +314,31 @@ export function AboutView({
                   </Fragment>
                 ))}
               </h2>
-              <div className="max-w-md text-sm leading-relaxed text-zinc-400 sm:text-base">
-                <p>{about.bio}</p>
-              </div>
+              {/* Profile readout. This section used to be a headline over one
+                  grey paragraph, and it was the only part of the site that
+                  dropped the HUD language everything else speaks (mono labels,
+                  hairlines, the LiveStatus / CodingSince readouts). Same facts,
+                  now structured: label left, value right, a hairline between —
+                  no card, no box. The bio keeps its place underneath as a
+                  smaller closing note so his own voice isn't lost. */}
+              <dl className="max-w-md">
+                {profileFacts.map((fact, i) => (
+                  <div
+                    key={fact.label}
+                    className={`grid grid-cols-[6.5rem_1fr] items-baseline gap-x-5 py-3 ${
+                      i > 0 ? "border-t border-white/[0.07]" : ""
+                    }`}
+                  >
+                    <dt className="font-mono text-[0.625rem] uppercase tracking-[0.2em] text-zinc-500">
+                      {fact.label}
+                    </dt>
+                    <dd className="text-sm text-zinc-200 sm:text-base">{fact.value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="max-w-sm text-sm leading-relaxed text-zinc-500">
+                {about.bio}
+              </p>
             </div>
 
             {/* RIGHT — the android */}

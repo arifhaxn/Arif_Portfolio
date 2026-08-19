@@ -75,11 +75,21 @@ export interface SkillGroup {
   label: string;
   items: string[];
 }
+/** One row of the About profile readout: a mono label and its value. */
+export interface ProfileFact {
+  label: string;
+  value: string;
+}
 export interface AboutContent {
   /** Segmented, multi-line description headline (preserves the blue accents). */
   descriptionHeading: HeadingLine[];
   /** Bio paragraph under the headline. */
   bio: string;
+  /** Profile readout rows under the description headline. Optional: existing
+   *  Firestore documents predate it, so the About section falls back to a seeded
+   *  default (see PROFILE_FALLBACK in AboutView) until it's filled in from the
+   *  admin. Set it there and it takes over completely. */
+  profile?: ProfileFact[];
   /** Skills section eyebrow, e.g. "— Skills". */
   skillsEyebrow: string;
   skills: SkillGroup[];

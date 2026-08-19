@@ -5,6 +5,7 @@ import type {
   AboutContent,
   HeadingLine,
   HeadingSegment,
+  ProfileFact,
   SkillGroup,
 } from "@/lib/content-types";
 import {
@@ -69,7 +70,33 @@ export function AboutForm({ initial }: { initial: AboutContent }) {
           />
         </Field>
 
-        <Field label="Bio">
+        <Field
+          label="Profile rows"
+          hint="the label/value readout under the description heading; leave empty to use the built-in defaults"
+        >
+          <InlineList<ProfileFact>
+            items={doc.profile ?? []}
+            onChange={(profile) => setDoc((d) => ({ ...d, profile }))}
+            makeEmpty={() => ({ label: "", value: "" })}
+            addLabel="row"
+            render={(fact, update) => (
+              <div className="flex items-center gap-3">
+                <TextInput
+                  value={fact.label}
+                  placeholder="label (e.g. Based)"
+                  onChange={(v) => update({ label: v })}
+                />
+                <TextInput
+                  value={fact.value}
+                  placeholder="value (e.g. Sylhet, Bangladesh)"
+                  onChange={(v) => update({ value: v })}
+                />
+              </div>
+            )}
+          />
+        </Field>
+
+        <Field label="Bio" hint="the closing note under the profile rows">
           <TextArea rows={5} value={doc.bio} onChange={(v) => setDoc((d) => ({ ...d, bio: v }))} />
         </Field>
 
