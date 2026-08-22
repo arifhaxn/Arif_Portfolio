@@ -81,11 +81,23 @@ export default async function Image() {
             display: "flex",
             flexDirection: "row",
             alignItems: "center",
-            gap: 38,
+            gap: 24,
+            // The mark's transparent padding sits only on its left within the
+            // row, so the VISIBLE lockup centred 8px right of the frame and ate
+            // into the right-hand crop margin (30 left vs 15 right). Nudging the
+            // row evens the two, which is what matters for the square crop.
+            marginRight: 16,
           }}
         >
+          {/* 254px BOX, not 254px of visible mark: the logo PNG carries
+              transparent padding and its ink measures 0.613 of the box height,
+              so a box the same height as the name rendered a mark barely half
+              its size. 245 x 0.613 = 150px of ink, matching the name block's
+              150px at this size. Both numbers came off the rendered PNG.
+              The gap is small because that same padding already contributes
+              ~26px of visual space to the right of the mark. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={logoSrc} alt="" width={168} height={168} />
+          <img src={logoSrc} alt="" width={245} height={245} />
           <div style={{ display: "flex", flexDirection: "column" }}>
             {hero.name.split(/\s+/).map((word) => (
               <div
@@ -93,7 +105,7 @@ export default async function Image() {
                 style={{
                   display: "flex",
                   fontFamily: "Relidux",
-                  fontSize: 100,
+                  fontSize: 83,
                   lineHeight: 1.04,
                   letterSpacing: "0.02em",
                   textTransform: "uppercase",
@@ -113,7 +125,7 @@ export default async function Image() {
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            width: 660,
+            width: 590,
             marginTop: 40,
           }}
         >
