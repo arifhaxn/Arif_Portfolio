@@ -39,7 +39,7 @@ const siteUrl =
     ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
     : "http://localhost:3000");
 
-const title = "Arif Hasan — Portfolio";
+const title = "Arif Hasan";
 const description =
   "Arif Hasan — full-stack developer. Portfolio, projects & work.";
 
