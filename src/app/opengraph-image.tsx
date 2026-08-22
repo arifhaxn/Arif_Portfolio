@@ -66,49 +66,60 @@ export default async function Image() {
           height: "100%",
           display: "flex",
           flexDirection: "column",
-          justifyContent: "space-between",
-          padding: "72px 80px",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "64px 80px",
           background: `radial-gradient(circle at 50% -6%, #16253c 0%, #0b1424 28%, ${INK} 62%)`,
         }}
       >
-        {/* Identity stack, centred so it survives a square crop intact. */}
+        {/* Lockup: mark on the left, name stacked beside it, details beneath.
+            The whole group is centred as one block and sized to stay inside the
+            middle 630px square, so WhatsApp's square crop still gets the mark
+            AND both name lines rather than slicing one off. */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 38,
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={logoSrc} alt="" width={168} height={168} />
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {hero.name.split(/\s+/).map((word) => (
+              <div
+                key={word}
+                style={{
+                  display: "flex",
+                  fontFamily: "Relidux",
+                  fontSize: 100,
+                  lineHeight: 1.04,
+                  letterSpacing: "0.02em",
+                  textTransform: "uppercase",
+                  color: "#ffffff",
+                }}
+              >
+                {word}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Role, hairline, standing detail — a narrower block under the lockup,
+            so the rule reads as part of it instead of spanning the whole frame. */}
         <div
           style={{
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            flexGrow: 1,
-            justifyContent: "center",
+            width: 660,
+            marginTop: 40,
           }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={logoSrc} alt="" width={92} height={92} />
-
-          {/* Each name word on its own line: stacked, both words clear the
-              630px square with room to spare, and it echoes the site's hero
-              where the name breaks the same way. */}
-          {hero.name.split(/\s+/).map((word) => (
-            <div
-              key={word}
-              style={{
-                display: "flex",
-                fontFamily: "Relidux",
-                fontSize: 118,
-                lineHeight: 1.02,
-                letterSpacing: "0.02em",
-                textTransform: "uppercase",
-                color: "#ffffff",
-                marginTop: word === hero.name.split(/\s+/)[0] ? 30 : 0,
-              }}
-            >
-              {word}
-            </div>
-          ))}
-
           <div
             style={{
               display: "flex",
-              marginTop: 26,
               fontSize: 25,
               letterSpacing: "0.3em",
               textTransform: "uppercase",
@@ -117,24 +128,20 @@ export default async function Image() {
           >
             {hero.eyebrow.replace(/^\/\s*/, "")}
           </div>
-        </div>
-
-        {/* Bottom rail. Centred as one run so the square crop keeps it readable
-            rather than showing two orphaned fragments. */}
-        <div style={{ display: "flex", flexDirection: "column" }}>
           <div
             style={{
               display: "flex",
+              width: "100%",
               height: 1,
-              background: "rgba(255,255,255,0.12)",
-              marginBottom: 24,
+              background: "rgba(255,255,255,0.14)",
+              marginTop: 24,
+              marginBottom: 22,
             }}
           />
           <div
             style={{
               display: "flex",
-              justifyContent: "center",
-              gap: 20,
+              gap: 18,
               fontSize: 22,
               letterSpacing: "0.16em",
               textTransform: "uppercase",
