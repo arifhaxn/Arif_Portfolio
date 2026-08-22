@@ -4,15 +4,16 @@
 // The tab was still showing create-next-app's leftover favicon.ico, i.e. the
 // Vercel triangle, on a site that has its own mark.
 //
-// Generated rather than dropped in as a flat file because the logo asset is a
-// WHITE mark on transparency: used directly it would vanish against a light
-// browser theme, and a favicon has to survive both. Compositing it onto the
-// site's dark ground here guarantees the mark reads either way, and keeps the
-// tab consistent with the share card.
+// TRANSPARENT background, per Arif's call. Worth being explicit about the
+// trade-off rather than burying it: the mark is white, so it reads well on a
+// dark browser theme (and on Chrome/Edge's dark tab strip) but will be faint
+// against a light one. That's the accepted cost of no tile.
 //
-// The mark is also inset. Its PNG carries transparent padding (its ink measures
-// ~0.79 of the box width), which at 32px would leave it looking like a speck in
-// a dark square, so it's scaled up to fill the tile properly.
+// Still generated rather than pointing the icon convention at the SVG or PNG
+// directly, because both carry transparent padding around the mark — its ink
+// measures only ~0.79 of the box width. Used as-is at 32px the mark would sit
+// small and lost inside its own empty margin. Rendering it here lets it be
+// scaled past the tile edge so the ink itself fills the favicon.
 // -----------------------------------------------------------------------------
 
 import { ImageResponse } from "next/og";
@@ -35,8 +36,7 @@ export default async function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#0b1424",
-          borderRadius: 7,
+          // No background at all — the PNG keeps its alpha channel.
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
